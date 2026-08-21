@@ -1,0 +1,2268 @@
+{
+  "findings": [
+    {
+      "finding_type": "RULE_MATCH",
+      "rule_id": "RULE-PROC-001:v1.0.0",
+      "severity": 0.7,
+      "description": "Execution of PowerShell with encoded or unconstrained command line.",
+      "mitre_tactic": "Execution",
+      "mitre_technique": "T1059.001",
+      "metadata": {},
+      "id": "cdf0967e-632c-4e5a-873f-3031c332960e",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "created_at": "2026-08-21T14:35:22.954677"
+    },
+    {
+      "finding_type": "RULE_MATCH",
+      "rule_id": "RULE-PROC-002:v1.0.0",
+      "severity": 0.95,
+      "description": "Execution of mimikatz credential dumper.",
+      "mitre_tactic": "Credential Access",
+      "mitre_technique": "T1003",
+      "metadata": {},
+      "id": "0e9182a8-c3a4-4945-bbf9-6860e8b4cf31",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "created_at": "2026-08-21T14:35:22.947669"
+    }
+  ],
+  "ml_findings": [
+    {
+      "finding_type": "ML_ANOMALY",
+      "rule_id": "ML-isolation_forest:v1.0",
+      "severity": 1.0,
+      "description": "Behavioral anomaly detected (score 1.00)",
+      "mitre_tactic": null,
+      "mitre_technique": null,
+      "metadata": {},
+      "id": "a69c9d52-0c71-4cfd-a537-53492a998025",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "created_at": "2026-08-21T14:35:23.137136"
+    }
+  ],
+  "relationships": [
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7745,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.633,
+            "description": "Occurred within 110.0s",
+            "attributes": {
+              "delta_seconds": 110.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7745,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f99b0e6f-20d1-43f4-b3b3-eba77e76b8d7",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f8827090-5451-42d2-8bba-2cf3a42d8707",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.817,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.817,
+            "description": "Occurred within 55.0s",
+            "attributes": {
+              "delta_seconds": 55.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.817,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f7a9ed69-f16c-456b-a525-ce46f0163307",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f5a42dba-c756-47c9-ac9b-523708e73841",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "PROCESS_FILE",
+      "weight": 0.7783,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_FILE",
+            "strength": 0.75,
+            "description": "Identical file path 'svchost.exe'",
+            "attributes": {
+              "file_path": "svchost.exe"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7783,
+        "primary_type": "PROCESS_FILE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f3871417-5806-4ce0-bc9f-cdd893e3c138",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7983,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.733,
+            "description": "Occurred within 80.0s",
+            "attributes": {
+              "delta_seconds": 80.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7983,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "f01ddc79-5dd0-41ee-bdff-ffcdd9612260",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "eafb3126-889c-4f9d-b3d0-1897b0ae2583",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7826,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.667,
+            "description": "Occurred within 100.0s",
+            "attributes": {
+              "delta_seconds": 100.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7826,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "e92b4aea-3738-4d25-8c74-6e835253b764",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7745,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.633,
+            "description": "Occurred within 110.0s",
+            "attributes": {
+              "delta_seconds": 110.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7745,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "e132d771-281a-4517-acc7-43aacea5f79d",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "dada79e4-c4c6-4874-8631-dc4eef5a3622",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d527f7b6-9ab8-42c9-a5b6-6cba6c9e752c",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d4ba895d-1035-41b9-8a2a-7f11e6c4b9fa",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d0699f10-3d38-466f-a965-c2626b1fac4e",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
+      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.783,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.783,
+            "description": "Occurred within 65.0s",
+            "attributes": {
+              "delta_seconds": 65.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.783,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d0160310-50a9-45f7-b968-ce04a615f6a7",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7826,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.667,
+            "description": "Occurred within 100.0s",
+            "attributes": {
+              "delta_seconds": 100.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7826,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "cd0ddb18-32a3-48a7-b0cd-dcb0318db39f",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.817,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.817,
+            "description": "Occurred within 55.0s",
+            "attributes": {
+              "delta_seconds": 55.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.817,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "c20c2e19-c360-4034-9d51-20f7b81b911a",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+    },
+    {
+      "relationship_type": "PROCESS_FILE",
+      "weight": 0.8652,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          },
+          {
+            "type": "SAME_FILE",
+            "strength": 0.75,
+            "description": "Identical file path 'svchost.exe'",
+            "attributes": {
+              "file_path": "svchost.exe"
+            }
+          }
+        ],
+        "aggregate_strength": 0.8652,
+        "primary_type": "PROCESS_FILE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "c0cfbf17-1702-4c16-8e91-8eb43d8c6dfa",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "b858226d-6680-4989-bf79-38eaaed616ac",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.733,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.733,
+            "description": "Occurred within 80.0s",
+            "attributes": {
+              "delta_seconds": 80.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.733,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "b2815e63-92d4-4687-ae4d-381bef0c2e15",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "b175991d-8f33-4fc7-8d57-87f3130d4d09",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.9,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.9,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "b09b4207-7ec1-4ec6-80ef-22864c83bd1f",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "ad880bc7-a394-4a66-8d02-00cacaf4475d",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7905,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7905,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "ac44bf9b-9ca2-4b03-88c7-604e1304d14c",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.933,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.933,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "a6d14852-ae95-4b83-b84f-ef77fae4b9fc",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.846,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.846,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "98afc587-c9ee-4309-a6ee-6b857938ccfd",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.9,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.9,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "937cf502-5dc9-487d-a554-1c4a864132a3",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "8c96e67b-40d8-467f-886a-90d8abbee273",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.8421,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.917,
+            "description": "Occurred within 25.0s",
+            "attributes": {
+              "delta_seconds": 25.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.8421,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "86c76680-35b1-4135-a55e-96ddad3b8a68",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "PROCESS_FILE",
+      "weight": 0.7667,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.6,
+            "description": "Occurred within 120.0s",
+            "attributes": {
+              "delta_seconds": 120.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_PROCESS",
+            "strength": 0.4,
+            "description": "Same process 'svchost.exe' on 'wkstn-1'",
+            "attributes": {
+              "process_name": "svchost.exe"
+            }
+          },
+          {
+            "type": "SAME_FILE",
+            "strength": 0.75,
+            "description": "Identical file path 'svchost.exe'",
+            "attributes": {
+              "file_path": "svchost.exe"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7667,
+        "primary_type": "PROCESS_FILE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "820ef193-f81a-41b7-b311-d90e83e7400f",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7f2a8450-9592-4825-b716-0f55a046c629",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.8381,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.8381,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7d980ee5-e326-4385-b810-b7a0e66ea398",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.85,
+            "description": "Occurred within 45.0s",
+            "attributes": {
+              "delta_seconds": 45.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7b4a6082-ac2b-4c94-b418-8cf7f4aa1894",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.846,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.846,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7acf2630-9e18-46cb-a451-7e5fdda0682f",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7a94207d-af8a-4aae-aa73-6531b8b35187",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.733,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.733,
+            "description": "Occurred within 80.0s",
+            "attributes": {
+              "delta_seconds": 80.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.733,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "79beb3f6-4a2c-4ed0-8d1b-5a1b3bad7919",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.933,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.933,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "767f9751-8b8c-4edb-a584-44e6847f4286",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.767,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.767,
+            "description": "Occurred within 70.0s",
+            "attributes": {
+              "delta_seconds": 70.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.767,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "715e9532-c48c-4a04-a2c2-a010874604e9",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7905,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7905,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "7153fc61-9c83-4732-9a66-e8528bb00531",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.85,
+            "description": "Occurred within 45.0s",
+            "attributes": {
+              "delta_seconds": 45.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "66814f56-5896-4d31-adae-a0c84b1d6f82",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.767,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.767,
+            "description": "Occurred within 70.0s",
+            "attributes": {
+              "delta_seconds": 70.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.767,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "4346f4d4-594d-453b-9d1d-117e6f1f57a8",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.8164,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          },
+          {
+            "type": "FINDING_CO_OCCURRENCE",
+            "strength": 0.35,
+            "description": "Triggered findings (RULE_MATCH & RULE_MATCH)",
+            "attributes": {
+              "f1_types": [
+                "RULE_MATCH"
+              ],
+              "f2_types": [
+                "RULE_MATCH"
+              ]
+            }
+          }
+        ],
+        "aggregate_strength": 0.8164,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "403b55bf-18f4-426e-adcf-96622a7b6963",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "3eed6894-e3a4-466e-9487-45e04baf98b7",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "30951f06-7c02-4d4a-84e5-3f8258167138",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.846,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.846,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "2cfb99ba-e3ba-48bd-b4ad-7e56a8dc8a4c",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "297948d3-489f-4b55-814a-5a799f585cc2",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.834,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.883,
+            "description": "Occurred within 35.0s",
+            "attributes": {
+              "delta_seconds": 35.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.834,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "290f3fcc-2af9-45df-98d7-6a2062fc4278",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.95,
+            "description": "Occurred within 15.0s",
+            "attributes": {
+              "delta_seconds": 15.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "23256aae-57a9-4c12-bd4b-fa14eee1b75c",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "22fbfade-8297-414e-ab05-bf906eb8c7df",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.883,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.883,
+            "description": "Occurred within 35.0s",
+            "attributes": {
+              "delta_seconds": 35.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.883,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "1fc1477f-b44e-43c5-ac77-47cee9e69bfa",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7826,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.667,
+            "description": "Occurred within 100.0s",
+            "attributes": {
+              "delta_seconds": 100.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7826,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "1bb94271-c3fe-4e04-a1e9-fcd44b31b17e",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+    }
+  ],
+  "activities": [
+    {
+      "title": "Unknown \u2014 wkstn-1",
+      "activity_type": "UNKNOWN",
+      "start_time": "2026-08-21T13:35:22",
+      "end_time": "2026-08-21T13:37:22",
+      "status": "NEW",
+      "id": "be084013-00f2-434e-891a-84910139b5c5",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "description": "Activity consisting of 11 evidence records on wkstn-1.",
+      "evidence_count": 11,
+      "finding_count": 2,
+      "evidence_ids": [
+        "2760944b-cca1-4f84-ba3d-366703e2dd57",
+        "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+        "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+        "5ed9c806-173c-48c6-8902-9422f553f3a7",
+        "760f7d71-d454-4355-8214-f18d0c561c26",
+        "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+        "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+        "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+        "b85b043f-1a12-49b6-b794-d05150d73ce1",
+        "d86e27eb-1878-431e-87d9-398684ae15d8",
+        "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+      ],
+      "finding_ids": [
+        "0e9182a8-c3a4-4945-bbf9-6860e8b4cf31",
+        "cdf0967e-632c-4e5a-873f-3031c332960e"
+      ],
+      "context_attributes": {}
+    },
+    {
+      "title": "Unknown \u2014 wkstn-99",
+      "activity_type": "UNKNOWN",
+      "start_time": "2026-08-21T16:22:02",
+      "end_time": "2026-08-21T16:22:02",
+      "status": "NEW",
+      "id": "4ee7defd-e8a5-463e-9603-ab2884a88d1e",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "description": "Activity consisting of 1 evidence records on wkstn-99.",
+      "evidence_count": 1,
+      "finding_count": 1,
+      "evidence_ids": [
+        "c8e86cd1-1e2e-46ae-8dd0-965079efd66c"
+      ],
+      "finding_ids": [
+        "a69c9d52-0c71-4cfd-a537-53492a998025"
+      ],
+      "context_attributes": {}
+    }
+  ],
+  "prioritization": [
+    {
+      "target_type": "ACTIVITY",
+      "target_id": "be084013-00f2-434e-891a-84910139b5c5",
+      "priority_score": 69.59,
+      "priority_tier": "HIGH",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.4,
+            "normalized_value": 0.95,
+            "contribution": 38.0,
+            "description": "Strongest detection rule."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.25,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "ML anomaly signal."
+          },
+          {
+            "name": "contextual_cohesion",
+            "weight": 0.2,
+            "normalized_value": 0.8297,
+            "contribution": 16.59,
+            "description": "Contextual strength."
+          },
+          {
+            "name": "contextual_corroboration",
+            "weight": 0.15,
+            "normalized_value": 1.0,
+            "contribution": 15.0,
+            "description": "Multi-signal corroboration."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Activity priority based on detection and context.",
+      "method_type": "PROPOSED_CONTEXTUAL",
+      "id": "f87059c0-8ef2-404b-848e-285df1026ca9",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.851367"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "priority_score": 57.0,
+      "priority_tier": "MEDIUM",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.95,
+            "contribution": 57.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Artifact priority based on direct forensic observations.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "63ea8c3a-34b5-4d2c-9d90-d2b1f0304d2b",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.773235"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df",
+      "priority_score": 42.0,
+      "priority_tier": "MEDIUM",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.7,
+            "contribution": 42.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Artifact priority based on direct forensic observations.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "af898953-78a1-4b78-9bc8-f1243a66ba8e",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.781234"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "c8e86cd1-1e2e-46ae-8dd0-965079efd66c",
+      "priority_score": 40.0,
+      "priority_tier": "MEDIUM",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 1.0,
+            "contribution": 40.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Artifact priority based on direct forensic observations.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "1ad62a88-1bfd-4cda-b2f9-1268bb587a8b",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.817300"
+    },
+    {
+      "target_type": "ACTIVITY",
+      "target_id": "4ee7defd-e8a5-463e-9603-ab2884a88d1e",
+      "priority_score": 28.75,
+      "priority_tier": "LOW",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Strongest detection rule."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.25,
+            "normalized_value": 1.0,
+            "contribution": 25.0,
+            "description": "ML anomaly signal."
+          },
+          {
+            "name": "contextual_cohesion",
+            "weight": 0.2,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Contextual strength."
+          },
+          {
+            "name": "contextual_corroboration",
+            "weight": 0.15,
+            "normalized_value": 0.25,
+            "contribution": 3.75,
+            "description": "Multi-signal corroboration."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Activity priority based on detection and context.",
+      "method_type": "PROPOSED_CONTEXTUAL",
+      "id": "8e31b807-6f57-4de9-a758-e29566a65bdf",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.857336"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "f7118e38-5f83-4e65-acbe-0986c6db8ec9",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.809301"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "9da8756c-5684-4634-acc0-243d76a141a7",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.800173"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "70b2cc64-31c2-407e-8b00-8193ff996a17",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.751235"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "701a388b-6d2c-46db-91cb-b43250fe88a8",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.793173"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "43bc40b4-344a-4f15-a3bc-f59c98805a27",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.759234"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "35b15ee1-4da1-4880-bd61-bb5d6b330f54",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.742993"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "336be1b3-afa5-4a60-8e38-dca419ad3d91",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.787241"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "12c7f5da-1190-44fe-8450-922c30ba12c0",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.729741"
+    },
+    {
+      "target_type": "ARTIFACT",
+      "target_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "priority_score": 0.0,
+      "priority_tier": "INFORMATIONAL",
+      "factor_breakdown": {
+        "factors": [
+          {
+            "name": "deterministic_signal",
+            "weight": 0.6,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Direct rule matches."
+          },
+          {
+            "name": "ml_anomaly",
+            "weight": 0.4,
+            "normalized_value": 0.0,
+            "contribution": 0.0,
+            "description": "Behavioral ML anomaly."
+          }
+        ],
+        "configuration_version": "1.0.0"
+      },
+      "explanation_text": "Low informational artifact priority.",
+      "method_type": "BASELINE_INDEPENDENT",
+      "id": "04fb8fdc-9a35-4fae-a012-1ee47894fae0",
+      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "computed_at": "2026-08-21T14:35:23.766236"
+    }
+  ]
+}

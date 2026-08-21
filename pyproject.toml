@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forensiq"
+version = "0.1.0"
+description = "AI-Assisted Digital Forensic Triage and Evidence Prioritization Platform"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "ForensiQ Team" }
+]
+dependencies = [
+    "fastapi==0.115.5",
+    "uvicorn[standard]==0.32.1",
+    "pydantic==2.10.3",
+    "pydantic-settings==2.6.1",
+    "sqlalchemy==2.0.38",
+    "alembic==1.14.0",
+    "psycopg[binary]==3.3.4",
+    "pandas==2.2.3",
+    "numpy==2.4.6",
+    "scikit-learn==1.6.0",
+    "python-jose[cryptography]==3.5.0",
+    "bcrypt==5.0.0",
+    "cryptography==48.0.0",
+    "python-multipart==0.0.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.0.3",
+    "pytest-asyncio==1.4.0",
+    "httpx==0.28.1",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["backend/tests"]
+pythonpath = ["backend", "."]
+python_files = ["test_*.py", "*_test.py"]
+
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

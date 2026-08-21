@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ForensiQ - AI-Assisted Digital Forensic Triage and Evidence Prioritization Console">
+  <title>ForensiQ | Investigation Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body class="forensic-theme">
+  <!-- Top Application Bar -->
+  <header class="app-header" id="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <div class="brand-logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="m9 12 2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">ForensiQ</span>
+          <span class="brand-subtitle">Forensic Triage Console</span>
+        </div>
+      </div>
+      <div class="case-selector-container" id="case-selector-container" style="display: none;">
+        <label for="investigation-select" class="visually-hidden">Select Case</label>
+        <select id="investigation-select" class="case-dropdown" aria-label="Active Investigation Case">
+          <option value="">Loading investigations...</option>
+        </select>
+        <button id="btn-new-case" class="btn btn-secondary btn-sm" title="Create New Investigation Case">
+          + New Case
+        </button>
+      </div>
+    </div>
+    <div class="header-right">
+      <div id="user-profile-badge" class="user-badge" style="display: none;">
+        <span id="user-email-display" class="user-email"></span>
+
+        <button id="btn-logout" class="btn btn-ghost btn-sm" title="Log out of session">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Application Body -->
+  <main id="main-content" class="main-container">
+    <!-- Unauthenticated Login View -->
+    <section id="auth-view" class="auth-section">
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="auth-shield">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <circle cx="12" cy="11" r="3"/>
+            </svg>
+          </div>
+          <h2>Investigator Authentication</h2>
+          <p class="text-muted">Enter credentials to access digital forensics environment</p>
+        </div>
+        <form id="login-form" class="auth-form" autocomplete="off">
+          <div class="form-group">
+            <label for="login-email">Email Address</label>
+            <input type="email" id="login-email" class="form-control" required placeholder="investigator@agency.gov">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" class="form-control" required placeholder="••••••••••••">
+          </div>
+          <div id="auth-error-alert" class="alert alert-danger" style="display: none;"></div>
+          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block">
+            Authenticate Session
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- Authenticated Dashboard View -->
+    <section id="dashboard-view" class="dashboard-section" style="display: none;">
+      <!-- Global Error / Notice Banner -->
+      <div id="dashboard-alert" class="alert alert-warning" style="display: none;"></div>
+
+      <!-- Example Evidence Helper Banner (shown after example case creation) -->
+      <div id="example-evidence-banner" style="display: none; margin-bottom: 1rem; padding: 0.85rem 1.1rem; background: var(--bg-subtle, #1a1f2e); border: 1px solid var(--accent-blue, #5b8dee); border-radius: 6px; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 200px;">
+          <span style="font-size: 0.82rem; font-weight: 600; color: var(--accent-blue, #5b8dee);">Example Evidence Available</span>
+          <span style="font-size: 0.80rem; color: var(--text-secondary, #a0aab8); margin-left: 0.5rem;">16 records · Workstation compromise scenario</span>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center; flex-shrink: 0;">
+          <button id="btn-import-example-evidence" class="btn btn-secondary btn-sm">Import Example Evidence</button>
+          <a id="btn-download-example-evidence" href="/api/v1/examples/example_evidence.csv" download="example_evidence.csv" class="btn btn-ghost btn-sm" style="text-decoration: none;">Download CSV</a>
+          <button id="btn-dismiss-example-banner" class="btn btn-ghost btn-sm" style="opacity: 0.6;" title="Dismiss">✕</button>
+        </div>
+      </div>
+
+      <!-- Investigation Context Banner -->
+      <div class="case-banner card">
+        <div class="case-meta-primary">
+          <div class="case-title-row">
+            <h1 id="case-title-display">Investigation Overview</h1>
+            <span id="case-status-badge" class="badge badge-open">OPEN</span>
+            <span id="case-number-badge" class="badge badge-mono">CASE-NUM</span>
+          </div>
+          <p id="case-desc-display" class="case-desc text-muted">No description provided.</p>
+        </div>
+        <div class="case-meta-secondary">
+          <div class="meta-item">
+            <span class="meta-label">Created At</span>
+            <span id="case-created-display" class="meta-value">--</span>
+          </div>
+          <div class="meta-item" style="margin-top: 0.5rem;">
+            <button id="btn-download-report" class="btn btn-secondary btn-sm" title="Download PDF Investigation Report" style="display: none;">
+              Download Report
+            </button>
+            <span id="btn-download-report-spinner" style="display: none; font-size: 0.8rem; color: var(--text-muted, #8892a4);">Generating PDF…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Action Bar -->
+      <div class="pipeline-bar card">
+        <div class="pipeline-header">
+          <div class="pipeline-title">
+            <strong>Pipeline Controls</strong>
+            <span class="text-muted text-sm">— Execute analytical triage stages</span>
+          </div>
+          <div class="pipeline-status-summary" id="pipeline-status-summary">
+            <span class="badge badge-mono" id="pipeline-state-badge">Ready</span>
+          </div>
+        </div>
+        <div class="pipeline-actions" id="pipeline-actions-container">
+          <button id="btn-action-import" class="btn btn-secondary btn-sm" title="Upload Evidence Source">
+            <span class="btn-text">Import Evidence</span>
+          </button>
+          <button id="btn-action-normalize" class="btn btn-secondary btn-sm" title="Normalize Evidence">
+            <span class="btn-text">Normalize</span>
+          </button>
+          <button id="btn-action-detect" class="btn btn-secondary btn-sm" title="Run Rules & IOCs">
+            <span class="btn-text">Run Detections</span>
+          </button>
+          <button id="btn-action-ml" class="btn btn-secondary btn-sm" title="Run ML Anomaly Analysis">
+            <span class="btn-text">Run ML Anomaly</span>
+          </button>
+          <button id="btn-action-correlate" class="btn btn-secondary btn-sm" title="Run Contextual Correlation">
+            <span class="btn-text">Correlate</span>
+          </button>
+          <button id="btn-action-activities" class="btn btn-secondary btn-sm" title="Form Investigation Activities">
+            <span class="btn-text">Cluster Activities</span>
+          </button>
+          <button id="btn-action-prioritize-artifact" class="btn btn-primary btn-sm" title="Prioritize Evidence">
+            <span class="btn-text">Prioritize Evidence</span>
+          </button>
+          <button id="btn-action-prioritize-activity" class="btn btn-primary btn-sm" title="Prioritize Activities">
+            <span class="btn-text">Prioritize Activities</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="dashboard-nav" aria-label="Investigation Navigation">
+
+        <button class="nav-tab active" data-tab="tab-overview">Overview</button>
+        <button class="nav-tab" data-tab="tab-prioritization">Prioritization</button>
+        <button class="nav-tab" data-tab="tab-findings">Findings & Detections</button>
+        <button class="nav-tab" data-tab="tab-ml">ML Anomalies</button>
+        <button class="nav-tab" data-tab="tab-correlations">Correlations</button>
+        <button class="nav-tab" data-tab="tab-activities">Activities</button>
+        <button class="nav-tab" data-tab="tab-sources">Evidence Sources</button>
+      </nav>
+
+      <!-- TAB 1: OVERVIEW -->
+      <div id="tab-overview" class="tab-pane active">
+        <!-- 1. Investigation Overview Metrics Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card card">
+            <span class="metric-label">Evidence Sources</span>
+            <span id="metric-sources" class="metric-value">0</span>
+            <span class="metric-foot">Ingested files</span>
+          </div>
+          <div class="metric-card card">
+            <span class="metric-label">Total Evidence Records</span>
+            <span id="metric-evidence" class="metric-value">0</span>
+            <span class="metric-foot">Normalized events</span>
+          </div>
+          <div class="metric-card card highlight-danger">
+            <span class="metric-label">Total Findings</span>
+            <span id="metric-findings" class="metric-value">0</span>
+            <span class="metric-foot">Rule, IOC &amp; ML findings</span>
+          </div>
+          <div class="metric-card card highlight-warning">
+            <span class="metric-label">ML Anomalies</span>
+            <span id="metric-anomalies" class="metric-value">0</span>
+            <span class="metric-foot">Statistical outliers</span>
+          </div>
+          <div class="metric-card card highlight-info">
+            <span class="metric-label">Correlated Links</span>
+            <span id="metric-relationships" class="metric-value">0</span>
+            <span class="metric-foot">Multi-dimensional links</span>
+          </div>
+          <div class="metric-card card highlight-primary">
+            <span class="metric-label">Activity Threads</span>
+            <span id="metric-activities" class="metric-value">0</span>
+            <span class="metric-foot">Coherent clusters</span>
+          </div>
+        </div>
+
+        <!-- Tier Breakdown & Top Priority Grid -->
+        <div class="dashboard-split-grid">
+          <!-- 2. Prioritization Tier Breakdown -->
+          <div class="card panel">
+            <div class="panel-header">
+              <h3>Prioritization Tier Distribution</h3>
+              <span class="text-sm text-muted">Dual-Level Triage</span>
+            </div>
+            <div class="tier-meters" id="tier-meters-container">
+              <div class="tier-meter-row">
+                <span class="tier-tag tag-critical">CRITICAL (80-100)</span>
+                <div class="tier-bar-bg"><div id="bar-critical" class="tier-bar-fill fill-critical" style="width: 0%"></div></div>
+                <span id="count-critical" class="tier-count font-mono">0</span>
+              </div>
+              <div class="tier-meter-row">
+                <span class="tier-tag tag-high">HIGH (60-79)</span>
+                <div class="tier-bar-bg"><div id="bar-high" class="tier-bar-fill fill-high" style="width: 0%"></div></div>
+                <span id="count-high" class="tier-count font-mono">0</span>
+              </div>
+              <div class="tier-meter-row">
+                <span class="tier-tag tag-medium">MEDIUM (40-59)</span>
+                <div class="tier-bar-bg"><div id="bar-medium" class="tier-bar-fill fill-medium" style="width: 0%"></div></div>
+                <span id="count-medium" class="tier-count font-mono">0</span>
+              </div>
+              <div class="tier-meter-row">
+                <span class="tier-tag tag-low">LOW (20-39)</span>
+                <div class="tier-bar-bg"><div id="bar-low" class="tier-bar-fill fill-low" style="width: 0%"></div></div>
+                <span id="count-low" class="tier-count font-mono">0</span>
+              </div>
+              <div class="tier-meter-row">
+                <span class="tier-tag tag-info">INFORMATIONAL (0-19)</span>
+                <div class="tier-bar-bg"><div id="bar-info" class="tier-bar-fill fill-info" style="width: 0%"></div></div>
+                <span id="count-info" class="tier-count font-mono">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Top Priority Artifacts/Activities -->
+          <div class="card panel">
+            <div class="panel-header">
+              <h3>Top Priority Artifacts & Activities</h3>
+              <span class="text-sm text-muted">Ranked by Explainable Priority Score</span>
+            </div>
+            <div class="table-responsive">
+              <table class="forensic-table" id="top-priority-table">
+                <thead>
+                  <tr>
+                    <th>Tier</th>
+                    <th>Score</th>
+                    <th>Target Type</th>
+                    <th>Target ID / Explanation</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="top-priority-tbody">
+                  <tr>
+                    <td colspan="5" class="text-center text-muted">Loading top priority items...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: ALL PRIORITIZATION RESULTS -->
+      <div id="tab-prioritization" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>All Prioritization Results</h3>
+            <div class="filter-controls">
+              <label for="filter-prio-tier" class="visually-hidden">Priority Tier Filter</label>
+              <select id="filter-prio-tier" class="form-control-sm">
+                <option value="">All Tiers</option>
+                <option value="CRITICAL">CRITICAL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+                <option value="INFORMATIONAL">INFORMATIONAL</option>
+              </select>
+              <label for="filter-prio-method" class="visually-hidden">Method Filter</label>
+              <select id="filter-prio-method" class="form-control-sm">
+                <option value="">All Methods</option>
+                <option value="BASELINE_INDEPENDENT">Evidence Prioritization</option>
+                <option value="PROPOSED_CONTEXTUAL">Activity Prioritization</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Tier</th>
+                  <th>Score</th>
+                  <th>Method</th>
+                  <th>Target Type</th>
+                  <th>Factor Breakdown</th>
+                  <th>Explanation</th>
+                  <th>Computed At</th>
+                </tr>
+              </thead>
+              <tbody id="all-prio-tbody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">Select filter or click to load priority results.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: DETERMINISTIC FINDINGS -->
+      <div id="tab-findings" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>Findings &amp; Detection Results</h3>
+            <div class="filter-controls">
+              <label for="filter-finding-type" class="visually-hidden">Finding Type Filter</label>
+              <select id="filter-finding-type" class="form-control-sm">
+                <option value="">All Types</option>
+                <option value="RULE_MATCH">Rule Match</option>
+                <option value="IOC_MATCH">IOC Match</option>
+                <option value="ML_ANOMALY">ML Anomaly</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Severity</th>
+                  <th>Rule / IOC ID</th>
+                  <th>MITRE Mapping</th>
+                  <th>Description</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="findings-tbody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No findings to display.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: ML ANOMALY DETECTION -->
+      <div id="tab-ml" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>Machine Learning Statistical Anomalies</h3>
+            <span class="text-sm text-muted">Unsupervised Isolation Forest</span>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Model ID</th>
+                  <th>Anomaly Score</th>
+                  <th>Status</th>
+                  <th>Diagnostic Features</th>
+                  <th>Description</th>
+                  <th>Detected At</th>
+                </tr>
+              </thead>
+              <tbody id="ml-anomalies-tbody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted">No ML anomalies to display.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: MULTI-DIMENSIONAL CORRELATIONS -->
+      <div id="tab-correlations" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>Discovered Evidence Correlations & Linkages</h3>
+            <div class="filter-controls">
+              <label for="filter-rel-type" class="visually-hidden">Relationship Type Filter</label>
+              <select id="filter-rel-type" class="form-control-sm">
+                <option value="">All Relationships</option>
+                <option value="TEMPORAL_PROXIMITY">Temporal Proximity</option>
+                <option value="USER_PIVOT">User Pivot</option>
+                <option value="IP_PIVOT">IP Pivot</option>
+                <option value="PARENT_CHILD_PROCESS">Parent/Child Process</option>
+                <option value="ACTIVITY_MEMBERSHIP">Activity Membership</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Relationship Type</th>
+                  <th>Weight</th>
+                  <th>Source Evidence</th>
+                  <th>Target Evidence</th>
+                  <th>Attributes</th>
+                </tr>
+              </thead>
+              <tbody id="correlations-tbody">
+                <tr>
+                  <td colspan="5" class="text-center text-muted">No evidence correlations discovered yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 6: ACTIVITY THREADS -->
+      <div id="tab-activities" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>Clustered Evidence Activity Threads</h3>
+            <span class="text-sm text-muted">Graph-Clustered Contextual Forensic Threads</span>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Activity Title</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Start Time</th>
+                  <th>End Time</th>
+                  <th>Evidence Items</th>
+                  <th>Findings</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="activities-tbody">
+                <tr>
+                  <td colspan="7" class="text-center text-muted">No activity threads clustered yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 7: EVIDENCE SOURCES & INGESTION STATUS -->
+      <div id="tab-sources" class="tab-pane">
+        <div class="card panel">
+          <div class="panel-header">
+            <h3>Ingested Evidence Sources & Provenance</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="forensic-table">
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Format</th>
+                  <th>SHA-256 Hash</th>
+                  <th>File Size</th>
+                  <th>Total Records</th>
+                  <th>Normalized</th>
+                  <th>Status</th>
+                  <th>Ingested At</th>
+                </tr>
+              </thead>
+              <tbody id="sources-tbody">
+                <tr>
+                  <td colspan="8" class="text-center text-muted">No evidence sources ingested yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modals Container -->
+  <div id="modals-container">
+    <!-- New Case Modal -->
+    <div id="modal-new-case" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="new-case-title-heading">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="new-case-title-heading">Create Investigation Case</h3>
+          <button class="modal-close" data-close="modal-new-case" aria-label="Close modal">&times;</button>
+        </div>
+        <form id="form-new-case">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="new-case-title">Investigation Title</label>
+              <input type="text" id="new-case-title" class="form-control" required placeholder="e.g. Host Compromise Triage - Server A">
+            </div>
+            <div class="form-group">
+              <label for="new-case-number">Case Number / Identifier</label>
+              <input type="text" id="new-case-number" class="form-control" required placeholder="e.g. CASE-2026-001">
+            </div>
+            <div class="form-group">
+              <label for="new-case-desc">Case Description</label>
+              <textarea id="new-case-desc" class="form-control" rows="3" placeholder="Brief summary of initial incident alerts, suspected assets, and scope..."></textarea>
+            </div>
+            <button type="button" id="btn-use-example-case" class="btn btn-ghost btn-sm" style="margin-bottom: 0.75rem; width: 100%; border: 1px dashed var(--border-color, #2a3040); color: var(--accent-blue, #5b8dee);">
+              Use Example Case
+            </button>
+            <div id="new-case-error" class="alert alert-danger" style="display: none;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" data-close="modal-new-case">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Case</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Import Evidence Modal -->
+    <div id="modal-import-evidence" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="import-evidence-heading">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 id="import-evidence-heading">Import Evidence File</h3>
+          <button class="modal-close" data-close="modal-import-evidence" aria-label="Close modal">&times;</button>
+        </div>
+        <form id="form-import-evidence">
+          <div class="modal-body">
+
+            <!-- Format guidance -->
+            <div class="import-guidance card" style="margin-bottom: 1rem; padding: 0.85rem 1rem; background: var(--bg-subtle, #1a1f2e); border: 1px solid var(--border-color, #2a3040); border-radius: 6px;">
+              <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted, #8892a4); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">Accepted formats</div>
+              <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem;">
+                <span class="badge badge-mono">CSV</span>
+                <span class="badge badge-mono">JSON</span>
+                <span class="badge badge-mono">JSONL</span>
+              </div>
+              <div style="font-size: 0.82rem; color: var(--text-secondary, #a0aab8); line-height: 1.5;">
+                <strong style="color: var(--text-primary, #e2e8f0);">Required:</strong> each record must contain a valid <code style="background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 3px;">timestamp</code> field.
+                All other fields are optional and mapped automatically when recognized.
+              </div>
+              <div style="font-size: 0.80rem; color: var(--text-muted, #8892a4); margin-top: 0.45rem; line-height: 1.5;">
+                <strong>Useful optional fields:</strong>
+                user &nbsp;·&nbsp; device &nbsp;·&nbsp; session &nbsp;·&nbsp; process &nbsp;·&nbsp;
+                IP address &nbsp;·&nbsp; port &nbsp;·&nbsp; protocol &nbsp;·&nbsp;
+                file path &nbsp;·&nbsp; file hash &nbsp;·&nbsp; status &nbsp;·&nbsp; action &nbsp;·&nbsp; event type
+              </div>
+              <div style="margin-top: 0.6rem;">
+                <a id="btn-download-example" href="/api/v1/examples/example_evidence.csv" download="example_evidence.csv"
+                   style="font-size: 0.80rem; color: var(--accent-blue, #5b8dee); text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem;">
+                  ⬇ Download example CSV
+                </a>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="import-file">Select evidence file</label>
+              <input type="file" id="import-file" class="form-control" required accept=".csv,.json,.jsonl,.log,.txt">
+              <span class="text-sm text-muted">A SHA-256 hash is calculated on upload to preserve chain-of-custody.</span>
+            </div>
+            <div class="form-group checkbox-group">
+              <label>
+                <input type="checkbox" id="import-allow-dup"> Allow duplicate file hash in this case
+              </label>
+            </div>
+            <div id="import-error" class="alert alert-danger" style="display: none;"></div>
+            <div id="import-success" class="alert alert-success" style="display: none;"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" data-close="modal-import-evidence">Cancel</button>
+            <button type="submit" id="btn-submit-import" class="btn btn-primary">Upload &amp; Stage Evidence</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Enhanced Structured Forensic Explainability & Inspection Modal -->
+    <div id="modal-detail" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="modal-detail-title">
+      <div class="modal-card modal-lg">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <h3 id="modal-detail-title">Forensic Artifact Detail Inspection</h3>
+            <span id="modal-detail-tier-badge" class="badge"></span>
+          </div>
+          <button class="modal-close" data-close="modal-detail" aria-label="Close modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <!-- Structured Explainability Breakdown Card -->
+          <div id="modal-explainability-panel" class="explainability-panel card" style="display: none;">
+            <div class="score-breakdown-header">
+              <div class="score-badge-container">
+                <span class="score-title">Priority Triage Score</span>
+                <div class="score-display">
+                  <span id="modal-score-value" class="score-num font-mono">0.0</span>
+                  <span class="score-max">/ 100</span>
+                </div>
+              </div>
+              <div class="score-narrative">
+                <span class="narrative-label">Explainability Narrative</span>
+                <p id="modal-explanation-text" class="narrative-body"></p>
+              </div>
+            </div>
+            <div class="factor-grid" id="modal-factor-grid"></div>
+          </div>
+
+          <!-- Provenance Traceability Breadcrumb Card -->
+          <div id="modal-provenance-panel" class="provenance-panel card" style="display: none;">
+            <div class="panel-subtitle">Forensic Chain of Custody & Provenance</div>
+            <div class="provenance-chain" id="modal-provenance-chain"></div>
+          </div>
+
+          <!-- Generic Key/Value Detail Panel -->
+          <div id="modal-generic-panel" class="generic-panel card" style="display: none; padding: 14px; margin-bottom: 14px;">
+            <div id="modal-generic-content" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="modal-detail">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

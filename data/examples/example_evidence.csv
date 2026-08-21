@@ -1,0 +1,17 @@
+timestamp,user_id,device_id,process_name,ip_address,status,action,event_type
+2026-08-21T08:01:00Z,jsmith,WORKSTATION-01,explorer.exe,192.168.1.55,SUCCESS,LOGIN,auth_login
+2026-08-21T08:03:10Z,jsmith,WORKSTATION-01,chrome.exe,192.168.1.55,SUCCESS,LAUNCH,process_create
+2026-08-21T08:07:45Z,jsmith,WORKSTATION-01,outlook.exe,192.168.1.55,SUCCESS,LAUNCH,process_create
+2026-08-21T08:15:20Z,jsmith,WORKSTATION-01,svchost.exe,192.168.1.55,SUCCESS,LAUNCH,process_create
+2026-08-21T08:22:05Z,jsmith,WORKSTATION-01,notepad.exe,192.168.1.55,SUCCESS,LAUNCH,process_create
+2026-08-21T08:30:00Z,jsmith,WORKSTATION-01,svchost.exe,192.168.1.55,SUCCESS,NETWORK,network_connect
+2026-08-21T09:10:15Z,jsmith,WORKSTATION-01,cmd.exe,192.168.1.55,FAILURE,EXEC,process_create
+2026-08-21T09:11:00Z,jsmith,WORKSTATION-01,cmd.exe,192.168.1.55,FAILURE,EXEC,process_create
+2026-08-21T09:11:45Z,jsmith,WORKSTATION-01,cmd.exe,192.168.1.55,SUCCESS,EXEC,process_create
+2026-08-21T09:14:30Z,jsmith,WORKSTATION-01,powershell.exe,192.168.1.55,SUCCESS,EXEC,process_create
+2026-08-21T09:16:00Z,jsmith,WORKSTATION-01,powershell.exe,198.51.100.10,SUCCESS,CONNECT,network_connect
+2026-08-21T09:17:22Z,jsmith,WORKSTATION-01,mimikatz.exe,192.168.1.55,SUCCESS,EXEC,process_create
+2026-08-21T09:19:05Z,jsmith,WORKSTATION-01,lsass.exe,192.168.1.55,SUCCESS,READ,process_create
+2026-08-21T09:20:50Z,jsmith,WORKSTATION-01,powershell.exe,198.51.100.10,SUCCESS,EXFIL,network_connect
+2026-08-21T09:25:00Z,jsmith,WORKSTATION-01,cmd.exe,192.168.1.55,SUCCESS,EXEC,process_create
+2026-08-21T09:30:10Z,jsmith,WORKSTATION-01,explorer.exe,192.168.1.55,SUCCESS,LOGOUT,auth_logout

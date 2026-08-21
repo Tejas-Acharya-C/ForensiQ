@@ -1,0 +1,90 @@
+# Deterministic rules for ForensiQ detection engine
+
+- id: IOC-IP-001
+  name: Known Malicious IP Match
+  version: 1.0.0
+  type: IOC_MATCH
+  severity: 0.90
+  description: "Network event matches known malicious test C2 indicator IP 198.51.100.10."
+  enabled: true
+  conditions:
+    field: ip_address
+    operator: equals
+    value: "198.51.100.10"
+  mitre_tactic: "Command and Control"
+  mitre_technique: "T1071"
+  tags:
+    - ioc
+    - c2
+    - network
+
+- id: IOC-HASH-001
+  name: Known Malicious File Hash Match
+  version: 1.0.0
+  type: IOC_MATCH
+  severity: 0.95
+  description: "File activity matches known malicious test malware hash."
+  enabled: true
+  conditions:
+    field: file_hash
+    operator: equals
+    value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  mitre_tactic: "Execution"
+  mitre_technique: "T1204"
+  tags:
+    - ioc
+    - malware
+
+- id: RULE-PROC-001
+  name: Suspicious PowerShell Execution
+  version: 1.0.0
+  type: FIELD_MATCH
+  severity: 0.70
+  description: "Execution of PowerShell with encoded or unconstrained command line."
+  enabled: true
+  conditions:
+    field: process_name
+    operator: equals
+    value: "powershell.exe"
+  mitre_tactic: "Execution"
+  mitre_technique: "T1059.001"
+  tags:
+    - script
+    - powershell
+
+- id: RULE-AUTH-SEQ-001
+  name: Repeated Failed Logins Followed by Success
+  version: 1.0.0
+  type: SEQUENCE
+  severity: 0.85
+  description: "Sequential pattern of failed authentication followed by successful logon within 5 minutes."
+  enabled: true
+  sequence:
+    group_by: user_id
+    max_span_seconds: 300
+    sequence_steps:
+      - field: status
+        operator: equals
+        value: "FAILURE"
+      - field: status
+        operator: equals
+        value: "SUCCESS"
+  mitre_tactic: "Credential Access"
+  mitre_technique: "T1110"
+  tags:
+    - brute_force
+    - auth_sequence
+
+- id: RULE-PROC-002
+  name: Mimikatz Execution
+  version: 1.0.0
+  type: FIELD_MATCH
+  severity: 0.95
+  description: "Execution of mimikatz credential dumper."
+  enabled: true
+  conditions:
+    field: process_name
+    operator: contains
+    value: "mimikatz"
+  mitre_tactic: "Credential Access"
+  mitre_technique: "T1003"

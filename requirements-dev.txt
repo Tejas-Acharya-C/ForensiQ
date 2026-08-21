@@ -1,0 +1,9 @@
+# -----------------------------------------------------------------------------
+# AUTO-GENERATED FROM pyproject.toml — DO NOT EDIT DIRECTLY
+# ForensiQ Development & Testing Dependencies (Python 3.11)
+# Generated: 2026-08-20
+# -----------------------------------------------------------------------------
+-r requirements.txt
+pytest==9.0.3
+pytest-asyncio==1.4.0
+httpx==0.28.1
