@@ -1,125 +1,146 @@
 # ForensiQ
 
-AI-Assisted Digital Forensic Triage & Evidence Prioritization Platform.
+> **AI-Assisted Digital Forensic Triage & Evidence Prioritization Platform**
+
+ForensiQ is an enterprise-grade digital forensic investigation platform designed to ingest raw forensic logs (CSV, JSON, JSONL), normalize them into a canonical schema, detect threats using deterministic SIGMA/YARA-style rules and unsupervised machine learning, correlate multi-source events, cluster activities, score risk priorities, and export comprehensive executive PDF investigation reports.
 
 ---
 
-## First-Time Setup
+## Technical Stack
 
-### 1. Install dependencies
+- **Backend**: FastAPI (`0.115.5`), Uvicorn (`0.32.1`), Pydantic v2 (`2.10.3`), SQLAlchemy (`2.0.38`), Alembic (`1.14.0`)
+- **Machine Learning & Analysis**: Scikit-Learn (`1.6.0`), Pandas (`2.2.3`), NumPy (`2.4.6`)
+- **PDF Reporting**: ReportLab (`4.2.5`)
+- **Authentication**: JWT Bearer Auth (`python-jose`, `bcrypt`, `cryptography`)
+- **Frontend**: Vanilla HTML5, JetBrains Mono & Inter Google Fonts, Vanilla CSS3 (Dark Glassmorphism UI), Vanilla JavaScript (ES6 SPA architecture)
+- **Database**: SQLite (Development / Single-node) / PostgreSQL (Production ready via SQLAlchemy)
+
+---
+
+## Quick Start & First-Time Setup
+
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run database migrations
+For development and testing dependencies:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+### 2. Run Database Migrations
+
+Initialize the database schema using Alembic:
 
 ```bash
 alembic -c alembic.ini upgrade head
 ```
 
-This creates an empty schema. No data is inserted.
+### 3. Create First Administrative User
 
-### 3. Create the first user
+Execute the interactive user creation utility script:
 
 ```bash
 python scripts/create_first_user.py
 ```
 
-The script will prompt for an email address and password.
-It will refuse to run if a user already exists.
+*Note: The script will prompt for your email address and password. It will safely refuse to execute if an admin user already exists.*
 
-### 4. Start the application
+### 4. Start Application Server
+
+Start the Uvicorn dev server:
 
 ```bash
 uvicorn app.main:app --app-dir backend --reload
 ```
 
-Or with Docker:
+Or using Docker Compose:
 
 ```bash
-docker compose up -d
+docker compose up -d --build
 ```
 
-### 5. Log in
+### 5. Access the Web Console
 
-Open your browser at `http://localhost:8000` and log in with the credentials you just created.
-
-### 6. Create a case
-
-Click **+ New Case** to create your first investigation.
-
-### 7. Upload evidence
-
-Click **Import Evidence** and upload a CSV, JSON, or JSONL file.
-
-**See `data/examples/example_evidence.csv` for an optional example input file.**
-
-### 8. Normalize
-
-Click **Normalize** (or the Normalize button on the source row) to parse the raw records into the canonical evidence schema.
-
-### 9. Run analysis stages
-
-Run each stage in order from the Pipeline Controls bar:
-
-- **Run Detections** — applies deterministic rules and IOC matching
-- **Run ML Anomaly** — unsupervised behavioral anomaly detection (requires ≥10 records)
-- **Correlate** — discovers multi-dimensional evidence linkages (requires ≥2 records)
-- **Cluster Activities** — groups related evidence into coherent activity threads
-- **Prioritize Evidence** — scores each evidence record
-- **Prioritize Activities** — scores each activity cluster
+Open your web browser and navigate to:
+```
+http://localhost:8000
+```
+Log in using the administrator credentials created in **Step 3**.
 
 ---
 
-## Accepted Evidence Formats
+## End-to-End Investigation Workflow
 
-ForensiQ accepts three file formats:
-
-| Format | Description |
-|--------|-------------|
-| **CSV** | Comma-separated values with a header row |
-| **JSON** | A top-level JSON array of objects (`[{...}, {...}]`) |
-| **JSONL** | One JSON object per line (newline-delimited JSON) |
-
-**The only mandatory field is a valid timestamp.** All other fields are optional and are mapped automatically when recognized.
-
-Common recognized field names:
-
-| Field | Example column names |
-|-------|---------------------|
-| Timestamp | `timestamp`, `time`, `event_time`, `created_at`, `TimeCreated` |
-| Event type | `event_type`, `event`, `EventID`, `action_type`, `type` |
-| User | `user_id`, `user`, `username`, `UserName`, `account` |
-| Device / host | `device_id`, `host`, `hostname`, `computer`, `machine` |
-| Process | `process_name`, `process`, `Image`, `exe` |
-| IP address | `ip_address`, `ip`, `DestinationIp`, `src_ip`, `client_ip` |
-| Port | `port`, `DestinationPort`, `dest_port` |
-| Protocol | `protocol`, `proto` |
-| File path | `file_path`, `path`, `TargetFilename`, `filename` |
-| File hash | `file_hash`, `hash`, `sha256`, `md5` |
-| Status | `status`, `result`, `outcome` |
-| Action | `action`, `command`, `operation`, `method` |
-
-See `data/examples/example_evidence.csv` for a minimal working example.
+1. **Create an Investigation Case**:
+   - Click **+ New Case** in the top navigation bar to initialize a dedicated investigation environment.
+2. **Import Evidence**:
+   - Click **Import Evidence** and upload forensic log files (`.csv`, `.json`, or `.jsonl`).
+   - Sample datasets are available in `data/examples/` (e.g., `sample_auth_attack.csv`, `sample_malware_process.csv`, `sample_network_c2.csv`, `sample_multistage_compromise.csv`).
+3. **Normalize Evidence**:
+   - Click **Normalize** on the source row to parse raw key-value logs into ForensiQ's canonical schema.
+4. **Execute Analytical Pipeline Stages**:
+   - **Run Detections**: Executes deterministic SIGMA-style rule matching (`data/rules/default_rules.yaml`) and IP/Hash IOC matching.
+   - **Run ML Anomaly**: Runs unsupervised Isolation Forest anomaly detection on log behavior (requires $\ge 10$ records).
+   - **Correlate**: Discovers relationships across IP, User, Host, and Process dimensions (requires $\ge 2$ records).
+   - **Cluster Activities**: Assembles correlated events into chronological attack chains/threads.
+   - **Prioritize Evidence**: Calculates risk scores ($0 - 100$) for individual evidence items.
+   - **Prioritize Activities**: Aggregates risk scores to rank investigation activities by threat severity.
+5. **Export PDF Executive Report**:
+   - Navigate to **Reports** and click **Export PDF Report** to generate a formatted forensic triage report.
 
 ---
 
-## Developer Utilities
+## Accepted Forensic Log Formats
 
-### Reset local development data
+ForensiQ automatically auto-maps incoming fields during normalization. Supported input file formats:
 
-```bash
-python scripts/reset_local_data.py
-```
+| Format | Structure |
+| :--- | :--- |
+| **CSV** | Comma-separated values with header row |
+| **JSON** | JSON array of record objects (`[{...}, {...}]`) |
+| **JSONL** | Newline-delimited JSON objects |
 
-**WARNING:** This permanently deletes the local SQLite database and clears uploaded evidence files.
-Requires typed confirmation. Only works on local SQLite databases — refuses PostgreSQL.
+### Field Auto-Mapping Reference
+
+| Canonical Field | Recognized Incoming Headers |
+| :--- | :--- |
+| **Timestamp** *(Mandatory)* | `timestamp`, `time`, `event_time`, `created_at`, `TimeCreated`, `date` |
+| **Event Type** | `event_type`, `event`, `EventID`, `action_type`, `type`, `log_type` |
+| **User / Account** | `user_id`, `user`, `username`, `UserName`, `account`, `SubjectUserName` |
+| **Host / Device** | `device_id`, `host`, `hostname`, `computer`, `machine`, `Workstation` |
+| **Process** | `process_name`, `process`, `Image`, `exe`, `ProcessName` |
+| **IP Address** | `ip_address`, `ip`, `DestinationIp`, `src_ip`, `client_ip`, `IpAddress` |
+| **Port** | `port`, `DestinationPort`, `dest_port`, `src_port` |
+| **File Path / Hash** | `file_path`, `path`, `TargetFilename`, `hash`, `sha256`, `md5` |
+| **Status / Outcome** | `status`, `result`, `outcome`, `Status`, `sub_status` |
 
 ---
 
-## Running Tests
+## Development & Utility Scripts
+
+All maintenance utilities are located in the `scripts/` directory:
+
+| Utility Script | Description |
+| :--- | :--- |
+| `python scripts/check_db.py` | Validates SQLite database connection and table integrity. |
+| `python scripts/create_first_user.py` | Interactive script to create initial admin user. |
+| `python scripts/reset_local_data.py` | Permanently resets local SQLite database and clears uploaded file caches. |
+| `python scripts/validate_samples.py` | Validates format compatibility of sample CSV files in `data/examples/`. |
+
+---
+
+## Running Test Suite
+
+ForensiQ features an automated test suite powered by `pytest` covering authentication, ingestion, normalization, detection, correlation, ML, prioritization, and PDF report generation.
+
+Run the test suite:
 
 ```bash
-python -m pytest backend/tests/ -v
+pytest backend/tests -v
 ```
+
+All 61 test cases run in isolation using a separate test database (`test_forensiq.db`).

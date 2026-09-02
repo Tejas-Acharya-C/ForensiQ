@@ -1,62 +1,145 @@
-# ForensiQ — Current Architecture
+# ForensiQ System Architecture & Technical Specifications
 
-## 1. Project Structure
-The repository contains the following core directories:
-- `backend/`: FastAPI application, APIs, SQLite models, migrations, and core analytical pipeline logic.
-- `frontend/`: Vanilla HTML/JS frontend application connecting to the REST API.
-- `data/`: Contains sample datasets (e.g. `example_evidence.csv`) and rule definitions.
-- `scripts/`: Development utilities (e.g., reset DB, create user).
+This document details the architectural design, module organization, database schema, data processing pipeline, and operational workflows of **ForensiQ** — an AI-Assisted Digital Forensic Triage and Evidence Prioritization Platform.
 
-## 2. Frontend Architecture
-The frontend is a lightweight Single Page Application using vanilla HTML (`index.html`), Javascript (`app.js`), and CSS (`styles.css`). It communicates directly with the FastAPI backend via REST. State management is manual via DOM manipulation.
+---
 
-## 3. Backend Architecture
-The backend is built with FastAPI and runs on Uvicorn. It is structured into clearly separated domains:
-- `api/`: REST routing and controllers.
-- `core/`: Config, auth, error handling, rate limiting.
-- `database/`: Session management and SQLAlchemy base.
-- `models/` and `schemas/`: SQLAlchemy ORM and Pydantic validation respectively.
-- `ingestion/`, `normalization/`: ETL pipeline modules.
-- Core pipeline logic files (`detection.py`, `correlation.py`, `activities.py`, `prioritization.py`, `report.py`).
+## 1. System High-Level Architecture
 
-## 4. Database Architecture
-Uses SQLite (`forensiq.db`) with SQLAlchemy ORM.
-Models include `User`, `Investigation`, `EvidenceSource`, `Evidence`, `Finding`, `Relationship`, `Activity`, and `PriorityResult`. Alembic is used for migrations (found in `backend/alembic`).
+ForensiQ operates as a decoupled, multi-stage analytical engine with a Client-Server architecture:
 
-## 5. Processing Pipeline
-The analytical pipeline executes in the following strict stages:
-1. **Evidence Ingestion** & **Normalization**: Parses CSV/JSON/JSONL to unified format.
-2. **Detection**: Applies deterministic rules (`data/rules/default_rules.yaml`).
-3. **ML Anomaly**: Behavioral ML anomaly scoring (requires >= 10 records).
-4. **Correlation**: Discovers relationships (same host, user, process).
-5. **Activity Clustering**: Groups correlated evidence into coherent threads.
-6. **Prioritization**: Generates risk scoring for individual evidence and grouped activities.
+```
+┌────────────────────────────────────────────────────────┐
+│                   Web Console Client                   │
+│          Vanilla HTML5 / Modern CSS / ES6 JS           │
+└───────────────────────────┬────────────────────────────┘
+                            │ REST API (JSON / Multipart)
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│                FastAPI Application Server              │
+│       JWT Auth Middleware | Rate Limiting | CORS        │
+├────────────────────────────────────────────────────────┤
+│                   Processing Pipeline                  │
+│ Ingestion ➔ Normalization ➔ Detections ➔ ML Anomaly    │
+│            ➔ Correlation ➔ Activities ➔ Prioritization │
+└───────────┬────────────────────────────────┬───────────┘
+            │                                │
+            ▼                                ▼
+┌──────────────────────┐         ┌──────────────────────┐
+│  SQLAlchemy ORM      │         │ ReportLab Engine     │
+│  SQLite / PostgreSQL │         │ Executive PDF Export │
+└──────────────────────┘         └──────────────────────┘
+```
 
-## 6. API Structure
-Key endpoints found in `backend/app/api/v1`:
-- `/auth`: Login and token generation.
-- `/investigations`: Case management.
-- `/evidence`: File upload and normalization.
-- `/detection`, `/ml`, `/correlation`, `/activities`, `/prioritization`: Triggering pipeline stages and retrieving results.
-- `/report`: End-of-case exports.
+---
 
-## 7. Authentication
-Simple JWT Bearer authentication is implemented. Users are stored in the SQLite DB and passwords are hashed.
+## 2. Directory Structure & Module Responsibilities
 
-## 8. Testing
-A robust `pytest` suite is located in `backend/tests/`, thoroughly verifying the analytical pipeline (e.g., `test_s12_end_to_end.py` for full lifecycle tests), idempotency, and error handling. Tests use an isolated `test_forensiq.db`.
+```
+Major Project/
+├── backend/
+│   ├── alembic/                # Database migration scripts & environment
+│   ├── app/
+│   │   ├── api/v1/             # REST endpoints (auth, evidence, detection, reports)
+│   │   ├── core/               # App configuration, security, JWT, rate limiting
+│   │   ├── database/           # SQLAlchemy engine initialization & DB sessions
+│   │   ├── ingestion/          # CSV/JSON/JSONL parser and contract engine
+│   │   ├── normalization/      # Canonical field mapping & validation engine
+│   │   ├── models/             # SQLAlchemy ORM database models
+│   │   ├── schemas/            # Pydantic v2 schemas for API validation
+│   │   ├── activities.py       # Activity clustering logic
+│   │   ├── correlation.py      # Multi-dimensional event correlation engine
+│   │   ├── detection.py        # SIGMA rule engine & IOC matcher
+│   │   ├── main.py             # FastAPI application entrypoint
+│   │   ├── prioritization.py   # Risk scoring & prioritization engine
+│   │   └── report.py           # ReportLab PDF report generation engine
+│   └── tests/                  # Automated pytest suite (61 tests)
+├── data/
+│   ├── examples/               # Sample forensic evidence datasets (.csv)
+│   └── rules/                  # SIGMA/YARA-style YAML rule definitions
+├── docs/
+│   └── architecture.md         # System Architecture & Technical Specifications
+├── frontend/
+│   ├── images/                 # Single-source UI branding assets & backgrounds
+│   ├── app.js                  # Frontend SPA controller logic
+│   ├── index.html              # Frontend HTML structure & layout
+│   ├── styles.css              # Dark glassmorphism CSS design system
+│   └── favicon.svg             # Application browser icon
+└── scripts/                    # Developer & administrative utility scripts
+```
 
-## 9. Known Limitations
-- The frontend state management is manual vanilla JS, which is brittle for complex interactions.
-- ML and Clustering stages mandate minimal threshold data (e.g., >= 10 records) to fire correctly.
-- SQLite limits concurrency.
+---
 
-## 10. Technical Debt
-- Lack of a robust frontend framework (React/Vue/Svelte) will hinder scaling UI complexity.
-- Testing currently leaves some generated files behind which we mitigated in this cleanup iteration, but test generation scripts could be improved.
-- Duplicate models/schemas naming overlaps could be consolidated.
+## 3. Core Database Models (`backend/app/models/`)
 
-## 11. Future Development Considerations
-- **Architecture Refactoring**: Migrate from SQLite to PostgreSQL if multi-user concurrent ingestion is required.
-- **Frontend Refactor**: Port the vanilla JS interface to a framework like React/Next.js for better component reusability and maintainability.
-- **Pipeline Extensibility**: Implement a plugin architecture for the Detection and ML phases rather than hardcoded logic.
+ForensiQ uses SQLAlchemy 2.0 ORM with 9 primary models:
+
+1. **`User`**: Administrator authentication credentials and roles.
+2. **`Investigation`**: Top-level case container (`case_number`, `title`, `status`).
+3. **`EvidenceSource`**: File upload metadata (`filename`, `file_type`, `file_hash`, `record_count`).
+4. **`Evidence`**: Normalized canonical forensic evidence item (timestamp, host, user, process, IP, port, action, hash).
+5. **`Finding`**: Detections generated by SIGMA rules, IOC matches, or ML anomaly algorithms linked to specific evidence items.
+6. **`Relationship`**: Linkages established between correlated evidence pairs (e.g. `SAME_HOST`, `SAME_USER`, `SAME_PROCESS`, `IP_COMMUNICATION`).
+7. **`Activity`**: Clustered attack sequence/thread containing multiple correlated evidence items.
+8. **`ActivityAssociation`**: Association mapping between `Activity` and `Evidence`.
+9. **`PriorityResult`**: Prioritization score records ($0 - 100$) for evidence items and activity clusters.
+
+---
+
+## 4. Multi-Stage Analytical Pipeline
+
+The analytical engine processes evidence in strict, deterministic order:
+
+```
+[Raw Log Upload]
+       │
+       ▼
+1. Ingestion ───────────► Parses raw CSV, JSON, or JSONL files.
+       │
+       ▼
+2. Normalization ───────► Standardizes timestamps & auto-maps log headers to Canonical Schema.
+       │
+       ▼
+3. Detection ───────────► Applies YAML rule engine (default_rules.yaml) & IOC IP/Hash matchers.
+       │
+       ▼
+4. ML Anomaly ──────────► Trains unsupervised Isolation Forest model (Requires >= 10 records).
+       │
+       ▼
+5. Correlation ─────────► Identifies relational edges across Host, User, Process, and Network dimensions.
+       │
+       ▼
+6. Clustering ──────────► Groups correlated graph components into chronological Activity Chains.
+       │
+       ▼
+7. Prioritization ──────► Calculates risk priority scores (0-100) for Evidence & Activity Chains.
+       │
+       ▼
+[Executive PDF Report]
+```
+
+---
+
+## 5. Security & Authentication Model
+
+- **Authentication**: JWT (JSON Web Tokens) signed via HMAC-SHA256.
+- **Password Storage**: Hashed using `bcrypt` (cost factor 12).
+- **Access Control**: All `/api/v1` routes except `/auth/login` and `/health` require `Authorization: Bearer <token>` headers.
+- **Rate Limiting**: Configured in `backend/app/core/rate_limit.py` to prevent brute-force attacks on sensitive endpoints.
+
+---
+
+## 6. Testing Architecture
+
+- **Framework**: `pytest` + `httpx` (Async test client).
+- **Isolation**: Tests execute using a dedicated SQLite database (`test_forensiq.db`) managed via `backend/tests/conftest.py`.
+- **Test Coverage**:
+  - `test_auth_simplified.py`: Authentication & access control.
+  - `test_ingestion_normalization.py`: Parser & schema mapper validation.
+  - `test_detection_semantics.py`: SIGMA rule engine execution semantics.
+  - `test_detection_ml.py`: Isolation forest anomaly detection algorithms.
+  - `test_correlation_activities.py`: Multi-source event correlation & thread formation.
+  - `test_idempotency.py`: Idempotent re-run safety across all pipeline stages.
+  - `test_prioritization.py`: Risk calculation logic.
+  - `test_report.py`: ReportLab PDF byte verification and layout formatting.
+  - `test_s12_end_to_end.py`: End-to-end multi-stage pipeline integration test.
