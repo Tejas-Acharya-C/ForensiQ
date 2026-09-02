@@ -69,3 +69,8 @@ data/sources/
 backend/data/
 data/scratch/
 uploads/
+
+# Generated Test Outputs & Reports
+*_test_results.json
+*.pdf
+
