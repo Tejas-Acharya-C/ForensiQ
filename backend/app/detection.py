@@ -80,6 +80,21 @@ def get_evidence_field_value(evidence: Evidence, field_path: str) -> Optional[An
     return getattr(evidence, field_path, None)
 
 
+def evaluate_step(evidence: Evidence, step: Any) -> bool:
+    """Evaluate a sequence step against an evidence record.
+
+    Supported step forms (backward compatible):
+    - Single condition dict: {"field": ..., "operator": ..., "value": ...}
+    - Multi-condition dict:  {"conditions": [{...}, {...}]}  — all must match (AND)
+    - List of condition dicts: [{...}, {...}]               — all must match (AND)
+    """
+    if isinstance(step, list):
+        return all(evaluate_condition(evidence, cond) for cond in step)
+    if isinstance(step, dict) and "conditions" in step:
+        return all(evaluate_condition(evidence, cond) for cond in step["conditions"])
+    return evaluate_condition(evidence, step)
+
+
 def evaluate_condition(evidence: Evidence, condition: Dict[str, Any]) -> bool:
     val = get_evidence_field_value(evidence, condition.get("field", ""))
     if val is None: return False
@@ -176,7 +191,7 @@ class DetectionService:
                     if n < len(steps): continue
                     
                     for i in range(n):
-                        if not evaluate_condition(evds[i], steps[0]): continue
+                        if not evaluate_step(evds[i], steps[0]): continue
                         
                         chain = [evds[i]]
                         start_ts = evds[i].timestamp.timestamp() if evds[i].timestamp else 0.0
@@ -188,7 +203,7 @@ class DetectionService:
                                 cand = evds[curr_idx]
                                 curr_ts = cand.timestamp.timestamp() if cand.timestamp else 0.0
                                 if curr_ts - start_ts > max_span: break
-                                if evaluate_condition(cand, steps[step_idx]):
+                                if evaluate_step(cand, steps[step_idx]):
                                     chain.append(cand)
                                     curr_idx += 1
                                     found = True

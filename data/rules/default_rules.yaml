@@ -37,10 +37,10 @@
 
 - id: RULE-PROC-001
   name: Suspicious PowerShell Execution
-  version: 1.0.0
+  version: 1.1.0
   type: FIELD_MATCH
   severity: 0.70
-  description: "Execution of PowerShell with encoded or unconstrained command line."
+  description: "Process execution of powershell.exe observed. PowerShell is a dual-use scripting engine commonly leveraged for post-exploitation activity."
   enabled: true
   conditions:
     field: process_name
@@ -54,21 +54,31 @@
 
 - id: RULE-AUTH-SEQ-001
   name: Repeated Failed Logins Followed by Success
-  version: 1.0.0
+  version: 1.1.0
   type: SEQUENCE
   severity: 0.85
-  description: "Sequential pattern of failed authentication followed by successful logon within 5 minutes."
+  description: "Sequential pattern of failed authentication followed by successful logon within 5 minutes, consistent with a brute-force or password-spraying attack."
   enabled: true
   sequence:
     group_by: user_id
     max_span_seconds: 300
     sequence_steps:
-      - field: status
-        operator: equals
-        value: "FAILURE"
-      - field: status
-        operator: equals
-        value: "SUCCESS"
+      - conditions:
+          - field: event_type
+            operator: in
+            value:
+              - AUTH_LOGIN
+          - field: status
+            operator: equals
+            value: "FAILURE"
+      - conditions:
+          - field: event_type
+            operator: in
+            value:
+              - AUTH_LOGIN
+          - field: status
+            operator: equals
+            value: "SUCCESS"
   mitre_tactic: "Credential Access"
   mitre_technique: "T1110"
   tags:

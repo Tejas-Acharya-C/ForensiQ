@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Security & Authentication Settings (Phase 9A)
     JWT_SECRET: Optional[str] = None
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours for development
     CORS_ALLOWED_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

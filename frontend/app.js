@@ -15,6 +15,13 @@ const state = {
   investigations: [],
   activeInvestigationId: localStorage.getItem('forensiq_active_inv_id') || null,
   summary: null,
+  _refreshing: false,
+};
+
+// Default dev credentials — used for silent token refresh on expiry
+const DEV_CREDENTIALS = {
+  email: 'dev@forensiq.local',
+  password: 'Dev123!@#',
 };
 
 // API Client Helper
@@ -32,10 +39,23 @@ async function apiRequest(endpoint, options = {}) {
 
   try {
     const res = await fetch(url, { ...options, headers });
-    
-    if (res.status === 401) {
+
+    if (res.status === 401 && endpoint !== '/auth/login') {
+      // Attempt silent token refresh before giving up
+      if (!state._refreshing) {
+        const refreshed = await silentRefreshToken();
+        if (refreshed) {
+          // Retry original request with new token
+          headers['Authorization'] = `Bearer ${state.token}`;
+          const retryRes = await fetch(url, { ...options, headers });
+          if (retryRes.ok) {
+            return await retryRes.json();
+          }
+        }
+      }
+      // Refresh failed — show login screen
       handleAuthFailure();
-      throw new Error('Session expired or unauthorized. Please re-authenticate.');
+      throw new Error('Session expired. Please log in again.');
     }
 
     const data = await res.json();
@@ -44,8 +64,39 @@ async function apiRequest(endpoint, options = {}) {
     }
     return data;
   } catch (err) {
-    console.error(`API Error on ${endpoint}:`, err);
+    if (!err.message.includes('Session expired')) {
+      console.error(`API Error on ${endpoint}:`, err);
+    }
     throw err;
+  }
+}
+
+// Silent Token Refresh — re-authenticates using stored or default credentials
+async function silentRefreshToken() {
+  state._refreshing = true;
+  try {
+    // Try stored email first, fall back to dev default
+    const email = localStorage.getItem('forensiq_email') || DEV_CREDENTIALS.email;
+    const password = localStorage.getItem('forensiq_password') || DEV_CREDENTIALS.password;
+
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!res.ok) return false;
+
+    const data = await res.json();
+    state.token = data.access_token;
+    state.user = data.user;
+    localStorage.setItem('forensiq_token', data.access_token);
+    console.info('[ForensiQ] Token silently refreshed.');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    state._refreshing = false;
   }
 }
 
@@ -54,6 +105,8 @@ function handleAuthFailure() {
   state.token = null;
   state.user = null;
   localStorage.removeItem('forensiq_token');
+  localStorage.removeItem('forensiq_email');
+  localStorage.removeItem('forensiq_password');
   showAuthView();
 }
 
@@ -93,10 +146,51 @@ function showAlert(message, type = 'warning', timeoutMs = 6000) {
 async function initApp() {
   setupEventListeners();
 
-  // Fix example download link to point to backend when running on dev client
-  const exampleLink = document.getElementById('btn-download-example');
-  if (exampleLink) {
-    exampleLink.href = `${API_BASE}/examples/example_evidence.csv`;
+  // Pre-fill login form with dev credentials for convenience
+  const emailInput = document.getElementById('login-email');
+  const passInput = document.getElementById('login-password');
+  if (emailInput && !emailInput.value) {
+    emailInput.value = localStorage.getItem('forensiq_email') || DEV_CREDENTIALS.email;
+  }
+  if (passInput && !passInput.value) {
+    passInput.value = localStorage.getItem('forensiq_password') || DEV_CREDENTIALS.password;
+  }
+
+  // Sample evidence dropdown — fetch available samples and update download link when selection changes
+  const sampleSelect = document.getElementById('sample-evidence-select');
+  const sampleDownloadLink = document.getElementById('btn-download-example');
+  
+  if (sampleSelect) {
+    apiRequest('/examples').then(samples => {
+      sampleSelect.innerHTML = '<option value="">Select a sample…</option>';
+      samples.forEach(sample => {
+        const option = document.createElement('option');
+        option.value = sample.filename;
+        option.textContent = sample.display_name;
+        sampleSelect.appendChild(option);
+      });
+    }).catch(err => {
+      console.warn('Failed to load sample list:', err);
+      sampleSelect.innerHTML = '<option value="">Failed to load samples</option>';
+    });
+
+    if (sampleDownloadLink) {
+      sampleSelect.addEventListener('change', () => {
+        const chosen = sampleSelect.value;
+        if (chosen) {
+          const url = `${API_BASE}/examples/${chosen}`;
+          sampleDownloadLink.href = url;
+          sampleDownloadLink.download = chosen;
+          sampleDownloadLink.style.opacity = '1';
+          sampleDownloadLink.style.pointerEvents = 'auto';
+        } else {
+          sampleDownloadLink.href = '#';
+          sampleDownloadLink.download = '';
+          sampleDownloadLink.style.opacity = '0.5';
+          sampleDownloadLink.style.pointerEvents = 'none';
+        }
+      });
+    }
   }
 
   // Health check
@@ -174,7 +268,11 @@ function renderDashboard(s) {
   // Case Header
   document.getElementById('case-title-display').textContent = s.investigation.title;
   document.getElementById('case-number-badge').textContent = s.investigation.case_number;
-  document.getElementById('case-status-badge').textContent = s.investigation.status;
+  const statusBadge = document.getElementById('case-status-badge');
+  if (statusBadge) {
+    statusBadge.textContent = s.investigation.status;
+    statusBadge.style.display = 'inline-block';
+  }
   document.getElementById('case-desc-display').textContent = s.investigation.description || 'No case description recorded.';
   document.getElementById('case-created-display').textContent = new Date(s.investigation.created_at).toLocaleString();
 
@@ -217,36 +315,48 @@ function renderDashboard(s) {
 }
 
 function renderEmptyInvestigation() {
-  document.getElementById('case-title-display').textContent = 'No investigations yet';
-  document.getElementById('case-number-badge').textContent = 'NONE';
-  document.getElementById('case-status-badge').textContent = '';
-  document.getElementById('case-desc-display').textContent = 'Click "+ New Case" to create your first investigation and begin forensic triage.';
-  document.getElementById('case-created-display').textContent = '--';
+  document.getElementById('case-title-display').textContent = 'No active investigation';
+  document.getElementById('case-number-badge').textContent = '—';
+  
+  const statusBadge = document.getElementById('case-status-badge');
+  if (statusBadge) {
+    statusBadge.textContent = '';
+    statusBadge.style.display = 'none';
+  }
+  
+  document.getElementById('case-desc-display').textContent = 'Please select a case from the dropdown or click "+ New Case" to create your first investigation and begin forensic triage.';
+  document.getElementById('case-created-display').textContent = '—';
+  
   // Hide report button when there is no active case
   const reportBtn = document.getElementById('btn-download-report');
   if (reportBtn) reportBtn.style.display = 'none';
-  document.getElementById('metric-sources').textContent = '0';
-  document.getElementById('metric-evidence').textContent = '0';
-  document.getElementById('metric-findings').textContent = '0';
-  document.getElementById('metric-anomalies').textContent = '0';
-  document.getElementById('metric-relationships').textContent = '0';
-  document.getElementById('metric-activities').textContent = '0';
+  
+  // Use dash to represent "no data available" cleanly
+  document.getElementById('metric-sources').textContent = '—';
+  document.getElementById('metric-evidence').textContent = '—';
+  document.getElementById('metric-findings').textContent = '—';
+  document.getElementById('metric-anomalies').textContent = '—';
+  document.getElementById('metric-relationships').textContent = '—';
+  document.getElementById('metric-activities').textContent = '—';
+
+  // Set default pipeline status for empty state
+  setPipelineState('No Case Selected', 'info');
 
   // Clear tier bars
   ['critical','high','medium','low','info'].forEach(t => {
     const bar = document.getElementById(`bar-${t}`);
     const cnt = document.getElementById(`count-${t}`);
     if (bar) bar.style.width = '0%';
-    if (cnt) cnt.textContent = '0';
+    if (cnt) cnt.textContent = '—';
   });
 
   const tbody = document.getElementById('top-priority-tbody');
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No investigations yet — create a case to begin forensic triage.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active case. Select or create an investigation to view priority artifacts.</td></tr>';
   }
   const sTbody = document.getElementById('sources-tbody');
   if (sTbody) {
-    sTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No evidence sources yet — import a CSV, JSON, or JSONL file to begin.</td></tr>';
+    sTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No active case. Import forensic evidence to view sources.</td></tr>';
   }
 }
 
@@ -480,6 +590,29 @@ function setPipelineState(statusText, badgeClass = 'mono') {
     badge.textContent = statusText;
     badge.className = `badge badge-${badgeClass}`;
   }
+
+  // Define keyword mappings to identify which stage is active/running
+  const btnMap = {
+    'import': ['Ingesting', 'Import'],
+    'normalize': ['Normalize', 'Normalizing'],
+    'detect': ['Detections', 'Detect'],
+    'ml': ['ML Anomaly', 'ML analysis'],
+    'correlate': ['Correlating', 'Correlation'],
+    'activities': ['Clustering', 'Activity formation'],
+    'prioritize-artifact': ['Prioritize Evidence', 'Prioritizing Evidence'],
+    'prioritize-activity': ['Prioritize Activities', 'Prioritizing Activities']
+  };
+
+  Object.entries(btnMap).forEach(([key, terms]) => {
+    const btn = document.getElementById(`btn-action-${key}`);
+    if (btn) {
+      btn.classList.remove('running');
+      const isRunning = terms.some(t => statusText.includes(t));
+      if (isRunning) {
+        btn.classList.add('running');
+      }
+    }
+  });
 }
 
 function showExampleEvidenceBanner() {
@@ -510,6 +643,9 @@ function setupEventListeners() {
       state.token = res.access_token;
       state.user = res.user;
       localStorage.setItem('forensiq_token', res.access_token);
+      // Store credentials for silent token refresh on expiry
+      localStorage.setItem('forensiq_email', email);
+      localStorage.setItem('forensiq_password', password);
       showDashboardView();
       await loadInvestigations();
     } catch (err) {

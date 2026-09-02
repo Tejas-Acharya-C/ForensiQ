@@ -2,15 +2,15 @@
   "findings": [
     {
       "finding_type": "RULE_MATCH",
-      "rule_id": "RULE-PROC-001:v1.0.0",
+      "rule_id": "RULE-PROC-001:v1.1.0",
       "severity": 0.7,
-      "description": "Execution of PowerShell with encoded or unconstrained command line.",
+      "description": "Process execution of powershell.exe observed. PowerShell is a dual-use scripting engine commonly leveraged for post-exploitation activity.",
       "mitre_tactic": "Execution",
       "mitre_technique": "T1059.001",
       "metadata": {},
-      "id": "cdf0967e-632c-4e5a-873f-3031c332960e",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "created_at": "2026-08-21T14:35:22.954677"
+      "id": "d8bc1bd8-2024-4c43-9f64-2422f32b2237",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "created_at": "2026-08-22T04:48:56.687743"
     },
     {
       "finding_type": "RULE_MATCH",
@@ -20,9 +20,9 @@
       "mitre_tactic": "Credential Access",
       "mitre_technique": "T1003",
       "metadata": {},
-      "id": "0e9182a8-c3a4-4945-bbf9-6860e8b4cf31",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "created_at": "2026-08-21T14:35:22.947669"
+      "id": "d90cdaca-eee9-4fdf-8ae8-2f81788b7383",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "created_at": "2026-08-22T04:48:56.675950"
     }
   ],
   "ml_findings": [
@@ -34,158 +34,71 @@
       "mitre_tactic": null,
       "mitre_technique": null,
       "metadata": {},
-      "id": "a69c9d52-0c71-4cfd-a537-53492a998025",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "created_at": "2026-08-21T14:35:23.137136"
+      "id": "7e3c6533-e082-442f-b177-b0ef5a7ce9b4",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "created_at": "2026-08-22T04:48:56.989782"
     }
   ],
   "relationships": [
     {
       "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7745,
+      "weight": 0.8164,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.633,
-            "description": "Occurred within 110.0s",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
             "attributes": {
-              "delta_seconds": 110.0
+              "delta_seconds": 10.0
             }
           },
           {
             "type": "SAME_USER",
             "strength": 0.6,
-            "description": "Same user 'alice'",
+            "description": "Same user 'bob'",
             "attributes": {
-              "user_id": "alice"
+              "user_id": "bob"
             }
           },
           {
             "type": "SAME_DEVICE",
             "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
+            "description": "Same device 'wkstn-2'",
             "attributes": {
-              "device_id": "wkstn-1"
+              "device_id": "wkstn-2"
             }
           },
           {
             "type": "SAME_IP",
             "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
+            "description": "Identical IP '10.0.0.6'",
             "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.7745,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "f99b0e6f-20d1-43f4-b3b3-eba77e76b8d7",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.867,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.867,
-            "description": "Occurred within 40.0s",
-            "attributes": {
-              "delta_seconds": 40.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.867,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "f8827090-5451-42d2-8bba-2cf3a42d8707",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.817,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.817,
-            "description": "Occurred within 55.0s",
-            "attributes": {
-              "delta_seconds": 55.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.817,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "f7a9ed69-f16c-456b-a525-ce46f0163307",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.8,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.8,
-            "description": "Occurred within 60.0s",
-            "attributes": {
-              "delta_seconds": 60.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.8,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "f5a42dba-c756-47c9-ac9b-523708e73841",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "PROCESS_FILE",
-      "weight": 0.7783,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.7,
-            "description": "Occurred within 90.0s",
-            "attributes": {
-              "delta_seconds": 90.0
+              "ip_address": "10.0.0.6"
             }
           },
           {
-            "type": "SAME_FILE",
-            "strength": 0.75,
-            "description": "Identical file path 'svchost.exe'",
+            "type": "FINDING_CO_OCCURRENCE",
+            "strength": 0.35,
+            "description": "Triggered findings (RULE_MATCH & RULE_MATCH)",
             "attributes": {
-              "file_path": "svchost.exe"
+              "f1_types": [
+                "RULE_MATCH"
+              ],
+              "f2_types": [
+                "RULE_MATCH"
+              ]
             }
           }
         ],
-        "aggregate_strength": 0.7783,
-        "primary_type": "PROCESS_FILE",
+        "aggregate_strength": 0.8164,
+        "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "f3871417-5806-4ce0-bc9f-cdd893e3c138",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+      "id": "f524781a-3fb9-4374-a654-6dfff8c4cfe6",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
+      "target_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
@@ -229,648 +142,10 @@
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "f01ddc79-5dd0-41ee-bdff-ffcdd9612260",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.854,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
-            "attributes": {
-              "delta_seconds": 10.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.854,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "eafb3126-889c-4f9d-b3d0-1897b0ae2583",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
-      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7826,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.667,
-            "description": "Occurred within 100.0s",
-            "attributes": {
-              "delta_seconds": 100.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.7826,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "e92b4aea-3738-4d25-8c74-6e835253b764",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7745,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.633,
-            "description": "Occurred within 110.0s",
-            "attributes": {
-              "delta_seconds": 110.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.7745,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "e132d771-281a-4517-acc7-43aacea5f79d",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.854,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
-            "attributes": {
-              "delta_seconds": 10.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'bob'",
-            "attributes": {
-              "user_id": "bob"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
-            "attributes": {
-              "device_id": "wkstn-2"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
-            "attributes": {
-              "ip_address": "10.0.0.6"
-            }
-          }
-        ],
-        "aggregate_strength": 0.854,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "dada79e4-c4c6-4874-8631-dc4eef5a3622",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.8,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.8,
-            "description": "Occurred within 60.0s",
-            "attributes": {
-              "delta_seconds": 60.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.8,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "d527f7b6-9ab8-42c9-a5b6-6cba6c9e752c",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.854,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
-            "attributes": {
-              "delta_seconds": 10.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'bob'",
-            "attributes": {
-              "user_id": "bob"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
-            "attributes": {
-              "device_id": "wkstn-2"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
-            "attributes": {
-              "ip_address": "10.0.0.6"
-            }
-          }
-        ],
-        "aggregate_strength": 0.854,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "d4ba895d-1035-41b9-8a2a-7f11e6c4b9fa",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.854,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
-            "attributes": {
-              "delta_seconds": 10.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.854,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "d0699f10-3d38-466f-a965-c2626b1fac4e",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
-      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.783,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.783,
-            "description": "Occurred within 65.0s",
-            "attributes": {
-              "delta_seconds": 65.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.783,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "d0160310-50a9-45f7-b968-ce04a615f6a7",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
-      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7826,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.667,
-            "description": "Occurred within 100.0s",
-            "attributes": {
-              "delta_seconds": 100.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.7826,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "cd0ddb18-32a3-48a7-b0cd-dcb0318db39f",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.817,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.817,
-            "description": "Occurred within 55.0s",
-            "attributes": {
-              "delta_seconds": 55.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.817,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "c20c2e19-c360-4034-9d51-20f7b81b911a",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
-      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
-    },
-    {
-      "relationship_type": "PROCESS_FILE",
-      "weight": 0.8652,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.9,
-            "description": "Occurred within 30.0s",
-            "attributes": {
-              "delta_seconds": 30.0
-            }
-          },
-          {
-            "type": "SAME_FILE",
-            "strength": 0.75,
-            "description": "Identical file path 'svchost.exe'",
-            "attributes": {
-              "file_path": "svchost.exe"
-            }
-          }
-        ],
-        "aggregate_strength": 0.8652,
-        "primary_type": "PROCESS_FILE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "c0cfbf17-1702-4c16-8e91-8eb43d8c6dfa",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.833,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.833,
-            "description": "Occurred within 50.0s",
-            "attributes": {
-              "delta_seconds": 50.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.833,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "b858226d-6680-4989-bf79-38eaaed616ac",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.733,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.733,
-            "description": "Occurred within 80.0s",
-            "attributes": {
-              "delta_seconds": 80.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.733,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "b2815e63-92d4-4687-ae4d-381bef0c2e15",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.8,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.8,
-            "description": "Occurred within 60.0s",
-            "attributes": {
-              "delta_seconds": 60.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.8,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "b175991d-8f33-4fc7-8d57-87f3130d4d09",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.9,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.9,
-            "description": "Occurred within 30.0s",
-            "attributes": {
-              "delta_seconds": 30.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.9,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "b09b4207-7ec1-4ec6-80ef-22864c83bd1f",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.854,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
-            "attributes": {
-              "delta_seconds": 10.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.854,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "ad880bc7-a394-4a66-8d02-00cacaf4475d",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7905,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.7,
-            "description": "Occurred within 90.0s",
-            "attributes": {
-              "delta_seconds": 90.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'alice'",
-            "attributes": {
-              "user_id": "alice"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-1'",
-            "attributes": {
-              "device_id": "wkstn-1"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.5'",
-            "attributes": {
-              "ip_address": "10.0.0.5"
-            }
-          }
-        ],
-        "aggregate_strength": 0.7905,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "ac44bf9b-9ca2-4b03-88c7-604e1304d14c",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.933,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.933,
-            "description": "Occurred within 20.0s",
-            "attributes": {
-              "delta_seconds": 20.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.933,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "a6d14852-ae95-4b83-b84f-ef77fae4b9fc",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+      "id": "f46ee0b2-4264-41bd-b50b-db85a53f2adb",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
@@ -914,33 +189,10 @@
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "98afc587-c9ee-4309-a6ee-6b857938ccfd",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.9,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.9,
-            "description": "Occurred within 30.0s",
-            "attributes": {
-              "delta_seconds": 30.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.9,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "937cf502-5dc9-487d-a554-1c4a864132a3",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
+      "id": "ed398516-8d55-478f-8210-6a9b0e853324",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+      "target_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760"
     },
     {
       "relationship_type": "TEMPORALLY_PROXIMATE",
@@ -960,22 +212,22 @@
         "primary_type": "TEMPORALLY_PROXIMATE",
         "configuration_version": "1.0.0"
       },
-      "id": "8c96e67b-40d8-467f-886a-90d8abbee273",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+      "id": "eb9a71cc-0fa1-4ceb-a876-2ed0df06d4df",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.8421,
+      "weight": 0.854,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.917,
-            "description": "Occurred within 25.0s",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
             "attributes": {
-              "delta_seconds": 25.0
+              "delta_seconds": 10.0
             }
           },
           {
@@ -1003,14 +255,434 @@
             }
           }
         ],
-        "aggregate_strength": 0.8421,
+        "aggregate_strength": 0.854,
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "86c76680-35b1-4135-a55e-96ddad3b8a68",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
+      "id": "e3e36926-9dda-4fdb-8bdc-ba5c06e650be",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020",
+      "target_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7745,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.633,
+            "description": "Occurred within 110.0s",
+            "attributes": {
+              "delta_seconds": 110.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7745,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "e24ae7e8-3e33-4108-9cce-27820dc1fcf2",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.967,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.967,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "dd9c8a7a-41a7-46cf-944f-db043197c64a",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.846,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.846,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d86bed3a-82a7-4c7b-bdec-096cb792b461",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020",
+      "target_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.817,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.817,
+            "description": "Occurred within 55.0s",
+            "attributes": {
+              "delta_seconds": 55.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.817,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d495a3f5-76aa-47b9-8a22-c8413d841f21",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
+      "target_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d0e1ab5f-fb55-49bb-9738-cca359fb365b",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d",
+      "target_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "d0915af2-fe6c-4739-81ac-3e0ffcd38cd0",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+      "target_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.854,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "cea8d3a7-27e5-4906-9aa8-5269a4da80e8",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+      "target_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7905,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7905,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "ce0dde94-4064-4301-a1c5-cf6c7070d769",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "cb568ff6-a73b-4c28-9f13-9013b93f72f2",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
+      "target_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.834,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.883,
+            "description": "Occurred within 35.0s",
+            "attributes": {
+              "delta_seconds": 35.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.834,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "c8c61264-a052-431c-84d2-74c6ad597d60",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020",
+      "target_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.733,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.733,
+            "description": "Occurred within 80.0s",
+            "attributes": {
+              "delta_seconds": 80.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.733,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "c71886d2-e957-4cf8-a46e-17cbdef2adf6",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d",
+      "target_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "bd51b8f4-bbef-43ae-8295-3056d9f6ce98",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
     },
     {
       "relationship_type": "PROCESS_FILE",
@@ -1070,115 +742,45 @@
         "primary_type": "PROCESS_FILE",
         "configuration_version": "1.0.0"
       },
-      "id": "820ef193-f81a-41b7-b311-d90e83e7400f",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+      "id": "bae39282-d3c3-4f19-ae00-38f6cae70fb9",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
     },
     {
       "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.867,
+      "weight": 0.833,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.867,
-            "description": "Occurred within 40.0s",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
             "attributes": {
-              "delta_seconds": 40.0
+              "delta_seconds": 50.0
             }
           }
         ],
-        "aggregate_strength": 0.867,
+        "aggregate_strength": 0.833,
         "primary_type": "TEMPORALLY_PROXIMATE",
         "configuration_version": "1.0.0"
       },
-      "id": "7f2a8450-9592-4825-b716-0f55a046c629",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+      "id": "b186682e-cc37-4269-8471-601477cb916c",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
+      "target_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.8381,
+      "weight": 0.854,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.9,
-            "description": "Occurred within 30.0s",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
             "attributes": {
-              "delta_seconds": 30.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'bob'",
-            "attributes": {
-              "user_id": "bob"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
-            "attributes": {
-              "device_id": "wkstn-2"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
-            "attributes": {
-              "ip_address": "10.0.0.6"
-            }
-          }
-        ],
-        "aggregate_strength": 0.8381,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "7d980ee5-e326-4385-b810-b7a0e66ea398",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.85,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.85,
-            "description": "Occurred within 45.0s",
-            "attributes": {
-              "delta_seconds": 45.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.85,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "7b4a6082-ac2b-4c94-b418-8cf7f4aa1894",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.846,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.933,
-            "description": "Occurred within 20.0s",
-            "attributes": {
-              "delta_seconds": 20.0
+              "delta_seconds": 10.0
             }
           },
           {
@@ -1206,60 +808,14 @@
             }
           }
         ],
-        "aggregate_strength": 0.846,
+        "aggregate_strength": 0.854,
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "7acf2630-9e18-46cb-a451-7e5fdda0682f",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.867,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.867,
-            "description": "Occurred within 40.0s",
-            "attributes": {
-              "delta_seconds": 40.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.867,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "7a94207d-af8a-4aae-aa73-6531b8b35187",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.733,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.733,
-            "description": "Occurred within 80.0s",
-            "attributes": {
-              "delta_seconds": 80.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.733,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "79beb3f6-4a2c-4ed0-8d1b-5a1b3bad7919",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-      "target_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5"
+      "id": "adad62d2-4546-4ca5-a32f-e071e80c8cfe",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
+      "target_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7"
     },
     {
       "relationship_type": "TEMPORALLY_PROXIMATE",
@@ -1279,10 +835,10 @@
         "primary_type": "TEMPORALLY_PROXIMATE",
         "configuration_version": "1.0.0"
       },
-      "id": "767f9751-8b8c-4edb-a584-44e6847f4286",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26"
+      "id": "abb45886-6fd5-4caa-bc21-b98d906b56f0",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57"
     },
     {
       "relationship_type": "TEMPORALLY_PROXIMATE",
@@ -1302,22 +858,45 @@
         "primary_type": "TEMPORALLY_PROXIMATE",
         "configuration_version": "1.0.0"
       },
-      "id": "715e9532-c48c-4a04-a2c2-a010874604e9",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "5ed9c806-173c-48c6-8902-9422f553f3a7"
+      "id": "a9a6b822-daeb-49b5-a86c-24152507d926",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298",
+      "target_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638"
     },
     {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.7905,
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.783,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.7,
-            "description": "Occurred within 90.0s",
+            "strength": 0.783,
+            "description": "Occurred within 65.0s",
             "attributes": {
-              "delta_seconds": 90.0
+              "delta_seconds": 65.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.783,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "a9178902-e923-425d-89b4-5d304188d71c",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
+      "target_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.854,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.967,
+            "description": "Occurred within 10.0s",
+            "attributes": {
+              "delta_seconds": 10.0
             }
           },
           {
@@ -1345,72 +924,26 @@
             }
           }
         ],
-        "aggregate_strength": 0.7905,
+        "aggregate_strength": 0.854,
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "7153fc61-9c83-4732-9a66-e8528bb00531",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
-      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.85,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.85,
-            "description": "Occurred within 45.0s",
-            "attributes": {
-              "delta_seconds": 45.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.85,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "66814f56-5896-4d31-adae-a0c84b1d6f82",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.767,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.767,
-            "description": "Occurred within 70.0s",
-            "attributes": {
-              "delta_seconds": 70.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.767,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "4346f4d4-594d-453b-9d1d-117e6f1f57a8",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-      "target_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7"
+      "id": "a5fb5c2d-8a85-4f1a-ac8e-2fb63c7e6aea",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75",
+      "target_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.8164,
+      "weight": 0.8579,
       "context_attributes": {
         "signals": [
           {
             "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.967,
-            "description": "Occurred within 10.0s",
+            "strength": 0.983,
+            "description": "Occurred within 5.0s",
             "attributes": {
-              "delta_seconds": 10.0
+              "delta_seconds": 5.0
             }
           },
           {
@@ -1436,75 +969,16 @@
             "attributes": {
               "ip_address": "10.0.0.6"
             }
-          },
-          {
-            "type": "FINDING_CO_OCCURRENCE",
-            "strength": 0.35,
-            "description": "Triggered findings (RULE_MATCH & RULE_MATCH)",
-            "attributes": {
-              "f1_types": [
-                "RULE_MATCH"
-              ],
-              "f2_types": [
-                "RULE_MATCH"
-              ]
-            }
           }
         ],
-        "aggregate_strength": 0.8164,
+        "aggregate_strength": 0.8579,
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "403b55bf-18f4-426e-adcf-96622a7b6963",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.8,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.8,
-            "description": "Occurred within 60.0s",
-            "attributes": {
-              "delta_seconds": 60.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.8,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "3eed6894-e3a4-466e-9487-45e04baf98b7",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.833,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.833,
-            "description": "Occurred within 50.0s",
-            "attributes": {
-              "delta_seconds": 50.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.833,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "30951f06-7c02-4d4a-84e5-3f8258167138",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8"
+      "id": "a2e62d3e-666b-4ee0-895b-a575002c612f",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760",
+      "target_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
@@ -1522,25 +996,25 @@
           {
             "type": "SAME_USER",
             "strength": 0.6,
-            "description": "Same user 'bob'",
+            "description": "Same user 'alice'",
             "attributes": {
-              "user_id": "bob"
+              "user_id": "alice"
             }
           },
           {
             "type": "SAME_DEVICE",
             "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
+            "description": "Same device 'wkstn-1'",
             "attributes": {
-              "device_id": "wkstn-2"
+              "device_id": "wkstn-1"
             }
           },
           {
             "type": "SAME_IP",
             "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
+            "description": "Identical IP '10.0.0.5'",
             "attributes": {
-              "ip_address": "10.0.0.6"
+              "ip_address": "10.0.0.5"
             }
           }
         ],
@@ -1548,173 +1022,10 @@
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "2cfb99ba-e3ba-48bd-b4ad-7e56a8dc8a4c",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.833,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.833,
-            "description": "Occurred within 50.0s",
-            "attributes": {
-              "delta_seconds": 50.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.833,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "297948d3-489f-4b55-814a-5a799f585cc2",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.834,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.883,
-            "description": "Occurred within 35.0s",
-            "attributes": {
-              "delta_seconds": 35.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'bob'",
-            "attributes": {
-              "user_id": "bob"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
-            "attributes": {
-              "device_id": "wkstn-2"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
-            "attributes": {
-              "ip_address": "10.0.0.6"
-            }
-          }
-        ],
-        "aggregate_strength": 0.834,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "290f3fcc-2af9-45df-98d7-6a2062fc4278",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
-    },
-    {
-      "relationship_type": "PROCESS_NETWORK",
-      "weight": 0.85,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.95,
-            "description": "Occurred within 15.0s",
-            "attributes": {
-              "delta_seconds": 15.0
-            }
-          },
-          {
-            "type": "SAME_USER",
-            "strength": 0.6,
-            "description": "Same user 'bob'",
-            "attributes": {
-              "user_id": "bob"
-            }
-          },
-          {
-            "type": "SAME_DEVICE",
-            "strength": 0.55,
-            "description": "Same device 'wkstn-2'",
-            "attributes": {
-              "device_id": "wkstn-2"
-            }
-          },
-          {
-            "type": "SAME_IP",
-            "strength": 0.7,
-            "description": "Identical IP '10.0.0.6'",
-            "attributes": {
-              "ip_address": "10.0.0.6"
-            }
-          }
-        ],
-        "aggregate_strength": 0.85,
-        "primary_type": "PROCESS_NETWORK",
-        "configuration_version": "1.0.0"
-      },
-      "id": "23256aae-57a9-4c12-bd4b-fa14eee1b75c",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
-      "target_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.867,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.867,
-            "description": "Occurred within 40.0s",
-            "attributes": {
-              "delta_seconds": 40.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.867,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "22fbfade-8297-414e-ab05-bf906eb8c7df",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "760f7d71-d454-4355-8214-f18d0c561c26",
-      "target_evidence_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
-    },
-    {
-      "relationship_type": "TEMPORALLY_PROXIMATE",
-      "weight": 0.883,
-      "context_attributes": {
-        "signals": [
-          {
-            "type": "TEMPORAL_PROXIMITY",
-            "strength": 0.883,
-            "description": "Occurred within 35.0s",
-            "attributes": {
-              "delta_seconds": 35.0
-            }
-          }
-        ],
-        "aggregate_strength": 0.883,
-        "primary_type": "TEMPORALLY_PROXIMATE",
-        "configuration_version": "1.0.0"
-      },
-      "id": "1fc1477f-b44e-43c5-ac77-47cee9e69bfa",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
-      "target_evidence_id": "d86e27eb-1878-431e-87d9-398684ae15d8"
+      "id": "9f85dd26-b6e7-4f68-b9d3-82e1ee2258e0",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+      "target_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7"
     },
     {
       "relationship_type": "PROCESS_NETWORK",
@@ -1758,59 +1069,748 @@
         "primary_type": "PROCESS_NETWORK",
         "configuration_version": "1.0.0"
       },
-      "id": "1bb94271-c3fe-4e04-a1e9-fcd44b31b17e",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "source_evidence_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
-      "target_evidence_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a"
+      "id": "9eb64e78-666f-4028-a51d-078965c684ac",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
+      "target_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.833,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.833,
+            "description": "Occurred within 50.0s",
+            "attributes": {
+              "delta_seconds": 50.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.833,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "9e794bc6-d079-4ea6-8537-d02ebf447463",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760",
+      "target_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.883,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.883,
+            "description": "Occurred within 35.0s",
+            "attributes": {
+              "delta_seconds": 35.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.883,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "9b13856f-4362-439e-81cd-018f17fad515",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.9,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.9,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "9af72dd8-8127-4026-983d-59658e030ab9",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+      "target_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7745,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.633,
+            "description": "Occurred within 110.0s",
+            "attributes": {
+              "delta_seconds": 110.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7745,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "9a65e315-569e-4a99-b95e-b5871f108433",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+      "target_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "8fa69401-3396-43e4-9a7e-9af0650027cc",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+      "target_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "886c4351-a236-48b8-a9d8-6914f31937e8",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.933,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.933,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "8742ce82-50fd-471a-bb47-8cf48b9c2e61",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
+      "target_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.8381,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.8381,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "824895c2-9da3-43f7-85a5-ee19d915b530",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020",
+      "target_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.846,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.933,
+            "description": "Occurred within 20.0s",
+            "attributes": {
+              "delta_seconds": 20.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.846,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "81956c7c-8109-4995-aa27-e383e27631c0",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.85,
+            "description": "Occurred within 45.0s",
+            "attributes": {
+              "delta_seconds": 45.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "777ee44d-df2f-41e1-8474-24a9ba903787",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.85,
+            "description": "Occurred within 45.0s",
+            "attributes": {
+              "delta_seconds": 45.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "74a93827-add8-4a8b-95e7-e67676d050ef",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d",
+      "target_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.767,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.767,
+            "description": "Occurred within 70.0s",
+            "attributes": {
+              "delta_seconds": 70.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.767,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "541f2bce-f2f5-4f0d-96ba-89c6c1a33c28",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d",
+      "target_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57"
+    },
+    {
+      "relationship_type": "PROCESS_FILE",
+      "weight": 0.8652,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          },
+          {
+            "type": "SAME_FILE",
+            "strength": 0.75,
+            "description": "Identical file path 'svchost.exe'",
+            "attributes": {
+              "file_path": "svchost.exe"
+            }
+          }
+        ],
+        "aggregate_strength": 0.8652,
+        "primary_type": "PROCESS_FILE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "519d4252-2a62-4b27-937f-027f4e1810b5",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+      "target_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.9,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.9,
+            "description": "Occurred within 30.0s",
+            "attributes": {
+              "delta_seconds": 30.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.9,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "47b4bde0-ab44-4a4f-b8ba-048a1c63b8d8",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.867,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.867,
+            "description": "Occurred within 40.0s",
+            "attributes": {
+              "delta_seconds": 40.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.867,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "4735dbc8-c0c4-4bea-9550-b773d6226457",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "4356c4bb-6f5e-4c86-99c1-9ef51ccaac43",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d",
+      "target_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.817,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.817,
+            "description": "Occurred within 55.0s",
+            "attributes": {
+              "delta_seconds": 55.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.817,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "4078d905-c0c9-43b0-a749-e50cb5070f18",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7905,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7905,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "37e3255e-b319-4405-a216-1d782008fa71",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "0f951486-6469-465f-8c77-d353da183f3d"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.767,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.767,
+            "description": "Occurred within 70.0s",
+            "attributes": {
+              "delta_seconds": 70.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.767,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "3491ae34-dcab-4aa3-aef1-ce9ca00884b9",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75",
+      "target_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020"
+    },
+    {
+      "relationship_type": "TEMPORALLY_PROXIMATE",
+      "weight": 0.8,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.8,
+            "description": "Occurred within 60.0s",
+            "attributes": {
+              "delta_seconds": 60.0
+            }
+          }
+        ],
+        "aggregate_strength": 0.8,
+        "primary_type": "TEMPORALLY_PROXIMATE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "31f17aa2-601a-4ca0-ba7a-2373589dfd92",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+      "target_evidence_id": "c0cec051-8367-4c70-a62e-bf648d176e75"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.85,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.95,
+            "description": "Occurred within 15.0s",
+            "attributes": {
+              "delta_seconds": 15.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'bob'",
+            "attributes": {
+              "user_id": "bob"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-2'",
+            "attributes": {
+              "device_id": "wkstn-2"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.6'",
+            "attributes": {
+              "ip_address": "10.0.0.6"
+            }
+          }
+        ],
+        "aggregate_strength": 0.85,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "260ec256-e1d5-46e9-95db-7dabd9d0a773",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
+      "target_evidence_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424"
+    },
+    {
+      "relationship_type": "PROCESS_NETWORK",
+      "weight": 0.7826,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.667,
+            "description": "Occurred within 100.0s",
+            "attributes": {
+              "delta_seconds": 100.0
+            }
+          },
+          {
+            "type": "SAME_USER",
+            "strength": 0.6,
+            "description": "Same user 'alice'",
+            "attributes": {
+              "user_id": "alice"
+            }
+          },
+          {
+            "type": "SAME_DEVICE",
+            "strength": 0.55,
+            "description": "Same device 'wkstn-1'",
+            "attributes": {
+              "device_id": "wkstn-1"
+            }
+          },
+          {
+            "type": "SAME_IP",
+            "strength": 0.7,
+            "description": "Identical IP '10.0.0.5'",
+            "attributes": {
+              "ip_address": "10.0.0.5"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7826,
+        "primary_type": "PROCESS_NETWORK",
+        "configuration_version": "1.0.0"
+      },
+      "id": "22e4aca4-6e68-4b8f-b9d8-031ecdc10893",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
+    },
+    {
+      "relationship_type": "PROCESS_FILE",
+      "weight": 0.7783,
+      "context_attributes": {
+        "signals": [
+          {
+            "type": "TEMPORAL_PROXIMITY",
+            "strength": 0.7,
+            "description": "Occurred within 90.0s",
+            "attributes": {
+              "delta_seconds": 90.0
+            }
+          },
+          {
+            "type": "SAME_FILE",
+            "strength": 0.75,
+            "description": "Identical file path 'svchost.exe'",
+            "attributes": {
+              "file_path": "svchost.exe"
+            }
+          }
+        ],
+        "aggregate_strength": 0.7783,
+        "primary_type": "PROCESS_FILE",
+        "configuration_version": "1.0.0"
+      },
+      "id": "1b75656d-0007-4597-bd2a-40f115dca46e",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "source_evidence_id": "db061027-103d-48e0-9fd5-f9615147a020",
+      "target_evidence_id": "48390421-18db-4b91-96dd-5270d6ed7298"
     }
   ],
   "activities": [
     {
       "title": "Unknown \u2014 wkstn-1",
       "activity_type": "UNKNOWN",
-      "start_time": "2026-08-21T13:35:22",
-      "end_time": "2026-08-21T13:37:22",
+      "start_time": "2026-08-22T03:48:56",
+      "end_time": "2026-08-22T03:50:56",
       "status": "NEW",
-      "id": "be084013-00f2-434e-891a-84910139b5c5",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "id": "c6d4b581-a58a-4232-be18-1bd61b449f8d",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
       "description": "Activity consisting of 11 evidence records on wkstn-1.",
       "evidence_count": 11,
       "finding_count": 2,
       "evidence_ids": [
-        "2760944b-cca1-4f84-ba3d-366703e2dd57",
-        "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
-        "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
-        "5ed9c806-173c-48c6-8902-9422f553f3a7",
-        "760f7d71-d454-4355-8214-f18d0c561c26",
-        "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
-        "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
-        "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
-        "b85b043f-1a12-49b6-b794-d05150d73ce1",
-        "d86e27eb-1878-431e-87d9-398684ae15d8",
-        "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df"
+        "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
+        "0f951486-6469-465f-8c77-d353da183f3d",
+        "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
+        "35fc4b06-d638-4ca5-9330-96f45ed3d760",
+        "421765c7-c8b5-456b-8b51-ef2c0628cf57",
+        "48390421-18db-4b91-96dd-5270d6ed7298",
+        "69932788-7f07-496d-8a4e-5c2106a2f638",
+        "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
+        "c0cec051-8367-4c70-a62e-bf648d176e75",
+        "c27c0171-6698-4991-b55b-65996f0eb63c",
+        "db061027-103d-48e0-9fd5-f9615147a020"
       ],
       "finding_ids": [
-        "0e9182a8-c3a4-4945-bbf9-6860e8b4cf31",
-        "cdf0967e-632c-4e5a-873f-3031c332960e"
+        "d8bc1bd8-2024-4c43-9f64-2422f32b2237",
+        "d90cdaca-eee9-4fdf-8ae8-2f81788b7383"
       ],
       "context_attributes": {}
     },
     {
       "title": "Unknown \u2014 wkstn-99",
       "activity_type": "UNKNOWN",
-      "start_time": "2026-08-21T16:22:02",
-      "end_time": "2026-08-21T16:22:02",
+      "start_time": "2026-08-22T06:35:36",
+      "end_time": "2026-08-22T06:35:36",
       "status": "NEW",
-      "id": "4ee7defd-e8a5-463e-9603-ab2884a88d1e",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
+      "id": "db1a3fcf-7d0a-4664-acea-8372646f5cdb",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
       "description": "Activity consisting of 1 evidence records on wkstn-99.",
       "evidence_count": 1,
       "finding_count": 1,
       "evidence_ids": [
-        "c8e86cd1-1e2e-46ae-8dd0-965079efd66c"
+        "ff85bba6-4e36-4765-bc1b-81ea55439e2e"
       ],
       "finding_ids": [
-        "a69c9d52-0c71-4cfd-a537-53492a998025"
+        "7e3c6533-e082-442f-b177-b0ef5a7ce9b4"
       ],
       "context_attributes": {}
     }
@@ -1818,7 +1818,7 @@
   "prioritization": [
     {
       "target_type": "ACTIVITY",
-      "target_id": "be084013-00f2-434e-891a-84910139b5c5",
+      "target_id": "c6d4b581-a58a-4232-be18-1bd61b449f8d",
       "priority_score": 69.59,
       "priority_tier": "HIGH",
       "factor_breakdown": {
@@ -1856,13 +1856,13 @@
       },
       "explanation_text": "Activity priority based on detection and context.",
       "method_type": "PROPOSED_CONTEXTUAL",
-      "id": "f87059c0-8ef2-404b-848e-285df1026ca9",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.851367"
+      "id": "fb118876-9227-4cc5-8dfb-1a941b545bfd",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.805458"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "2760944b-cca1-4f84-ba3d-366703e2dd57",
+      "target_id": "69932788-7f07-496d-8a4e-5c2106a2f638",
       "priority_score": 57.0,
       "priority_tier": "MEDIUM",
       "factor_breakdown": {
@@ -1886,13 +1886,13 @@
       },
       "explanation_text": "Artifact priority based on direct forensic observations.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "63ea8c3a-34b5-4d2c-9d90-d2b1f0304d2b",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.773235"
+      "id": "053c14ce-831d-4c5d-9425-7b09e73b0fe1",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.721000"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "f4dfc7c6-7115-444c-96cd-0dcfdca1f9df",
+      "target_id": "35fc4b06-d638-4ca5-9330-96f45ed3d760",
       "priority_score": 42.0,
       "priority_tier": "MEDIUM",
       "factor_breakdown": {
@@ -1916,13 +1916,13 @@
       },
       "explanation_text": "Artifact priority based on direct forensic observations.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "af898953-78a1-4b78-9bc8-f1243a66ba8e",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.781234"
+      "id": "dcc77e97-bfbc-4703-b41a-cefa2844b611",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.728002"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "c8e86cd1-1e2e-46ae-8dd0-965079efd66c",
+      "target_id": "ff85bba6-4e36-4765-bc1b-81ea55439e2e",
       "priority_score": 40.0,
       "priority_tier": "MEDIUM",
       "factor_breakdown": {
@@ -1946,13 +1946,13 @@
       },
       "explanation_text": "Artifact priority based on direct forensic observations.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "1ad62a88-1bfd-4cda-b2f9-1268bb587a8b",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.817300"
+      "id": "1680c66c-f3d9-4476-af83-337c847cf9ef",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.774501"
     },
     {
       "target_type": "ACTIVITY",
-      "target_id": "4ee7defd-e8a5-463e-9603-ab2884a88d1e",
+      "target_id": "db1a3fcf-7d0a-4664-acea-8372646f5cdb",
       "priority_score": 28.75,
       "priority_tier": "LOW",
       "factor_breakdown": {
@@ -1990,13 +1990,13 @@
       },
       "explanation_text": "Activity priority based on detection and context.",
       "method_type": "PROPOSED_CONTEXTUAL",
-      "id": "8e31b807-6f57-4de9-a758-e29566a65bdf",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.857336"
+      "id": "f9a84b3a-f64b-4f3b-985b-ec7efb372eb6",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.813535"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "5ed9c806-173c-48c6-8902-9422f553f3a7",
+      "target_id": "c0cec051-8367-4c70-a62e-bf648d176e75",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2020,13 +2020,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "f7118e38-5f83-4e65-acbe-0986c6db8ec9",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.809301"
+      "id": "f2023e37-8385-4fcb-90a9-5599d47bcd5d",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.743706"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "40b832b7-1a60-499d-aae0-3cc5d5b5651a",
+      "target_id": "48390421-18db-4b91-96dd-5270d6ed7298",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2050,13 +2050,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "9da8756c-5684-4634-acc0-243d76a141a7",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.800173"
+      "id": "ebbcf91c-fbba-4d17-9681-9c0203709066",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.764623"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "760f7d71-d454-4355-8214-f18d0c561c26",
+      "target_id": "0f951486-6469-465f-8c77-d353da183f3d",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2080,13 +2080,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "70b2cc64-31c2-407e-8b00-8193ff996a17",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.751235"
+      "id": "ebab00ab-15a0-4a97-9d2f-e0548c8f1a30",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.756469"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "d86e27eb-1878-431e-87d9-398684ae15d8",
+      "target_id": "2ebc93e3-d7a5-4dce-8140-32c9b2274424",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2110,13 +2110,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "701a388b-6d2c-46db-91cb-b43250fe88a8",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.793173"
+      "id": "d1d1e9b6-33ba-4dbb-81f0-7f6795ea6174",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.736213"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "a1be0299-c603-45c3-af53-26b2fa2cb0e5",
+      "target_id": "0d1595c2-ba84-4deb-9cc4-91a3820190d7",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2140,13 +2140,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "43bc40b4-344a-4f15-a3bc-f59c98805a27",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.759234"
+      "id": "a1df40dc-7c0e-4ede-a4fc-046aae5caead",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.692418"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "b85b043f-1a12-49b6-b794-d05150d73ce1",
+      "target_id": "a2ac2b32-7dd1-47fc-859c-50bb0bb9c40e",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2170,13 +2170,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "35b15ee1-4da1-4880-bd61-bb5d6b330f54",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.742993"
+      "id": "57e3c3ea-5362-4929-944d-586c908da6ad",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.673461"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "8ed098df-dd69-4571-a39b-a5fdd2b1b34e",
+      "target_id": "c27c0171-6698-4991-b55b-65996f0eb63c",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2200,13 +2200,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "336be1b3-afa5-4a60-8e38-dca419ad3d91",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.787241"
+      "id": "4d4010f9-d3fa-4150-97c1-c134c6f67a4e",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.683744"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "a0be1d4b-7dfb-4662-bcf6-7d6cb4cb14e8",
+      "target_id": "421765c7-c8b5-456b-8b51-ef2c0628cf57",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2230,13 +2230,13 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "12c7f5da-1190-44fe-8450-922c30ba12c0",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.729741"
+      "id": "43433650-e07f-4da9-8967-ba865df9a703",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.710918"
     },
     {
       "target_type": "ARTIFACT",
-      "target_id": "49f2ab39-7bf0-4013-ae96-6925ea8d09e7",
+      "target_id": "db061027-103d-48e0-9fd5-f9615147a020",
       "priority_score": 0.0,
       "priority_tier": "INFORMATIONAL",
       "factor_breakdown": {
@@ -2260,9 +2260,9 @@
       },
       "explanation_text": "Low informational artifact priority.",
       "method_type": "BASELINE_INDEPENDENT",
-      "id": "04fb8fdc-9a35-4fae-a012-1ee47894fae0",
-      "investigation_id": "d12ebe2b-0034-443e-bc42-4038950ce3bc",
-      "computed_at": "2026-08-21T14:35:23.766236"
+      "id": "35cc5244-5f79-4f4b-ac50-b92036fde8a1",
+      "investigation_id": "bf57ce37-791f-4e7f-93fa-6c61c2228def",
+      "computed_at": "2026-08-22T04:48:57.702015"
     }
   ]
 }

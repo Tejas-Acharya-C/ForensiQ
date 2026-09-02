@@ -18,12 +18,18 @@ from app.core.logging import get_logger, setup_logging
 logger = get_logger("main")
 
 
+from app.core.dev_reset import reset_development_data
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for clean startup and shutdown."""
     settings = get_settings()
     setup_logging(log_level=settings.LOG_LEVEL)
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
+    
+    # Safely clear development forensic data on startup (constrained by safety guards)
+    reset_development_data()
+    
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
 
