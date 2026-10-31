@@ -14,7 +14,7 @@ from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import check_investigation_access, get_current_user
+from app.api.deps import check_investigation_access
 from app.database.session import get_db
 from app.models.activity import Activity
 from app.models.evidence import Evidence
@@ -22,7 +22,6 @@ from app.models.evidence_source import EvidenceSource
 from app.models.finding import Finding
 from app.models.priority_result import PriorityResult
 from app.models.relationship import Relationship
-from app.models.user import User
 from app.report import ReportData, generate_report_pdf
 
 router = APIRouter(tags=["Investigation Report"])
@@ -49,14 +48,13 @@ def _safe_filename(text: str) -> str:
 def download_investigation_report(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> Response:
     """
     Assemble current investigation data and produce a professional A4 PDF report.
     The PDF is generated entirely in memory — nothing is written to the database
     or to persistent storage.
     """
-    inv = check_investigation_access(investigation_id, db, current_user)
+    inv = check_investigation_access(investigation_id, db)
 
     # ── Assemble ReportData ────────────────────────────────────────────────────
     data = ReportData()
@@ -72,7 +70,7 @@ def download_investigation_report(
         "created_at":   inv.created_at,
     }
 
-    # Aggregate summary counts (mirrors investigations.py get_investigation_summary)
+    # Aggregate summary counts
     total_sources       = db.query(func.count(EvidenceSource.id)).filter(EvidenceSource.investigation_id == investigation_id).scalar() or 0
     total_evidence      = db.query(func.count(Evidence.id)).filter(Evidence.investigation_id == investigation_id).scalar() or 0
     total_findings      = db.query(func.count(Finding.id)).filter(Finding.investigation_id == investigation_id).scalar() or 0
@@ -110,9 +108,10 @@ def download_investigation_report(
         },
     }
 
-    # Findings (up to 200 for the report)
+    # Findings (up to 200)
     findings_q = (
         db.query(Finding)
+        .options(selectinload(Finding.evidence_items))
         .filter(Finding.investigation_id == investigation_id)
         .order_by(Finding.created_at.desc())
         .limit(200)
@@ -128,6 +127,8 @@ def download_investigation_report(
             "mitre_tactic":  (f.optional_mitre_tags or {}).get("tactic"),
             "mitre_technique": (f.optional_mitre_tags or {}).get("technique"),
             "created_at":    f.created_at,
+            "evidence_count": len(f.evidence_items),
+            "evidence_ids":   [str(e.id) for e in f.evidence_items],
         }
         for f in findings_q
     ]
@@ -175,7 +176,7 @@ def download_investigation_report(
         for a in acts_q
     ]
 
-    # Priority results (top 20 for the report)
+    # Priority results (top 20)
     prio_q = (
         db.query(PriorityResult)
         .filter(PriorityResult.investigation_id == investigation_id)

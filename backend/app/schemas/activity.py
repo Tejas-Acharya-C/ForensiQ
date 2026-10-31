@@ -15,8 +15,15 @@ class ActivityBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_time_bounds(self) -> "ActivityBase":
-        if self.start_time > self.end_time:
-            raise ValueError("start_time must be less than or equal to end_time")
+        t1 = self.start_time
+        t2 = self.end_time
+        if t1 and t2:
+            if t1.tzinfo is None and t2.tzinfo is not None:
+                t1 = t1.replace(tzinfo=t2.tzinfo)
+            elif t1.tzinfo is not None and t2.tzinfo is None:
+                t2 = t2.replace(tzinfo=t1.tzinfo)
+            if t1 > t2:
+                raise ValueError("start_time must be less than or equal to end_time")
         return self
 
 

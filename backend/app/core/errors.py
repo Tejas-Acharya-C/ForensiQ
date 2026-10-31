@@ -32,16 +32,6 @@ class BadRequestError(ForensiQException):
         )
 
 
-class ValidationError(ForensiQException):
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            error_code="VALIDATION_ERROR",
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=details,
-        )
-
-
 class NotFoundError(ForensiQException):
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(
@@ -68,26 +58,6 @@ class ProcessingError(ForensiQException):
             message=message,
             error_code="PROCESSING_ERROR",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            details=details,
-        )
-
-
-class AuthenticationError(ForensiQException):
-    def __init__(self, message: str = "Invalid credentials or unauthenticated request.", details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            error_code="AUTHENTICATION_FAILED",
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            details=details,
-        )
-
-
-class AuthorizationError(ForensiQException):
-    def __init__(self, message: str = "Access denied. Insufficient permissions or unauthorized resource access.", details: Optional[Dict[str, Any]] = None):
-        super().__init__(
-            message=message,
-            error_code="FORBIDDEN",
-            status_code=status.HTTP_403_FORBIDDEN,
             details=details,
         )
 

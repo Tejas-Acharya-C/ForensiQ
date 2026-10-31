@@ -1,37 +1,134 @@
 /**
  * ForensiQ - Investigation Dashboard Logic & API Client
- * JWT handling, resilient state management, and unified aggregation.
+ * Phase 2.1: Robust Pipeline Coordinator, Prerequisite Semantics & Investigation Concurrency Safety
+ * Authentication removed — local single-investigator mode.
  */
 
-// Dynamic API Base URL: Uses the current hostname when running on Vite/LiveServer ports, relative /api/v1 otherwise
+// Dynamic API Base URL
 const isDedicatedDevClient = window.location.port === '5173' || window.location.port === '3000';
 const API_BASE = isDedicatedDevClient ? `http://${window.location.hostname}:8000/api/v1` : '/api/v1';
 
 // Application State
-
 const state = {
-  token: localStorage.getItem('forensiq_token') || null,
-  user: null,
   investigations: [],
   activeInvestigationId: localStorage.getItem('forensiq_active_inv_id') || null,
   summary: null,
-  _refreshing: false,
+  isPipelineRunning: false,
+  activeTab: 'tab-overview',
+  activeSubtab: 'subpane-activities',
+  sourcesCache: new Map(),
+  selectedEvidenceId: null,
+  currentEvidenceItems: [],
+  investigationVersion: 0,
+  requestSeq: {
+    summary: 0,
+    sources: 0,
+    evidence: 0,
+    activities: 0,
+    findings: 0,
+    correlations: 0,
+    prioritization: 0,
+    inspector: 0,
+  },
+  evidencePagination: {
+    offset: 0,
+    limit: 25,
+    total: 0,
+    source_id: '',
+    event_type: '',
+    user_id: '',
+    device_id: '',
+    loading: false,
+    requestId: 0,
+  },
 };
 
-// Default dev credentials — used for silent token refresh on expiry
-const DEV_CREDENTIALS = {
-  email: 'dev@forensiq.local',
-  password: 'Dev123!@#',
+// URL-Driven Route Configuration (Phase 3)
+const VALID_TABS = ['overview', 'evidence', 'analysis', 'report'];
+const TAB_MAP = {
+  'overview': 'tab-overview',
+  'evidence': 'tab-evidence',
+  'analysis': 'tab-analysis',
+  'report': 'tab-report'
 };
+const PANE_TO_TAB = {
+  'tab-overview': 'overview',
+  'tab-evidence': 'evidence',
+  'tab-analysis': 'analysis',
+  'tab-report': 'report',
+  'tab-findings': 'report'
+};
+
+let isUpdatingRouteInternally = false;
+
+function parseCurrentRoute() {
+  const hash = window.location.hash || '';
+  const match = hash.match(/^#\/case\/([^\/]*)(?:\/([^\/]+))?$/);
+  if (!match) {
+    return { caseId: null, tab: 'overview' };
+  }
+  const rawCaseId = match[1] ? decodeURIComponent(match[1]).trim() : null;
+  const rawTab = match[2] ? decodeURIComponent(match[2]).trim().toLowerCase() : 'overview';
+  const tab = VALID_TABS.includes(rawTab) ? rawTab : 'overview';
+  return {
+    caseId: rawCaseId || null,
+    tab: tab
+  };
+}
+
+function updateRouteHash(caseId, tabName) {
+  const cId = caseId !== undefined ? caseId : state.activeInvestigationId;
+  const currentPane = state.activeTab;
+  const tName = tabName || PANE_TO_TAB[currentPane] || 'overview';
+  const targetHash = `#/case/${cId ? encodeURIComponent(cId) : ''}/${tName}`;
+  if (window.location.hash !== targetHash) {
+    isUpdatingRouteInternally = true;
+    window.location.hash = targetHash;
+    setTimeout(() => { isUpdatingRouteInternally = false; }, 0);
+  }
+}
+
+function switchTabInternal(targetPaneId) {
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.getAttribute('data-tab') === targetPaneId) {
+      t.classList.add('active');
+    } else {
+      t.classList.remove('active');
+    }
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => {
+    if (p.id === targetPaneId) {
+      p.classList.add('active');
+    } else {
+      p.classList.remove('active');
+    }
+  });
+  state.activeTab = targetPaneId;
+}
+
+function navigateToTab(tabShortName) {
+  const targetPaneId = TAB_MAP[tabShortName] || 'tab-overview';
+  if (state.activeTab === targetPaneId) return;
+  switchTabInternal(targetPaneId);
+  updateRouteHash(state.activeInvestigationId, tabShortName);
+  refreshActiveDestinationView();
+}
+
+// Pipeline Stages Specification (7 Human-Readable Stages)
+const PIPELINE_STAGES = [
+  { id: 1, key: 'normalize', name: '01 Prepare Evidence', chipId: 'chip-stage-1', scope: 'source' },
+  { id: 2, key: 'detect', name: '02 Detect Threats', chipId: 'chip-stage-2', scope: 'source' },
+  { id: 3, key: 'ml', name: '03 AI Anomalies', chipId: 'chip-stage-3', scope: 'source', minRecords: 10 },
+  { id: 4, key: 'correlate', name: '04 Connect Events', chipId: 'chip-stage-4', scope: 'source', minRecords: 2 },
+  { id: 5, key: 'activities', name: '05 Group Activities', chipId: 'chip-stage-5', scope: 'source' },
+  { id: 6, key: 'prioritize-baseline', name: '06 Rank Evidence', chipId: 'chip-stage-6', scope: 'investigation' },
+  { id: 7, key: 'prioritize-contextual', name: '07 Rank Activities', chipId: 'chip-stage-7', scope: 'investigation' },
+];
 
 // API Client Helper
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const headers = options.headers || {};
-
-  if (state.token) {
-    headers['Authorization'] = `Bearer ${state.token}`;
-  }
 
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
@@ -39,98 +136,21 @@ async function apiRequest(endpoint, options = {}) {
 
   try {
     const res = await fetch(url, { ...options, headers });
-
-    if (res.status === 401 && endpoint !== '/auth/login') {
-      // Attempt silent token refresh before giving up
-      if (!state._refreshing) {
-        const refreshed = await silentRefreshToken();
-        if (refreshed) {
-          // Retry original request with new token
-          headers['Authorization'] = `Bearer ${state.token}`;
-          const retryRes = await fetch(url, { ...options, headers });
-          if (retryRes.ok) {
-            return await retryRes.json();
-          }
-        }
-      }
-      // Refresh failed — show login screen
-      handleAuthFailure();
-      throw new Error('Session expired. Please log in again.');
-    }
-
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.message || data.detail || `Request failed with status ${res.status}`);
     }
     return data;
   } catch (err) {
-    if (!err.message.includes('Session expired')) {
-      console.error(`API Error on ${endpoint}:`, err);
-    }
+    console.error(`API Error on ${endpoint}:`, err);
     throw err;
-  }
-}
-
-// Silent Token Refresh — re-authenticates using stored or default credentials
-async function silentRefreshToken() {
-  state._refreshing = true;
-  try {
-    // Try stored email first, fall back to dev default
-    const email = localStorage.getItem('forensiq_email') || DEV_CREDENTIALS.email;
-    const password = localStorage.getItem('forensiq_password') || DEV_CREDENTIALS.password;
-
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!res.ok) return false;
-
-    const data = await res.json();
-    state.token = data.access_token;
-    state.user = data.user;
-    localStorage.setItem('forensiq_token', data.access_token);
-    console.info('[ForensiQ] Token silently refreshed.');
-    return true;
-  } catch {
-    return false;
-  } finally {
-    state._refreshing = false;
-  }
-}
-
-// Authentication & Session Management
-function handleAuthFailure() {
-  state.token = null;
-  state.user = null;
-  localStorage.removeItem('forensiq_token');
-  localStorage.removeItem('forensiq_email');
-  localStorage.removeItem('forensiq_password');
-  showAuthView();
-}
-
-function showAuthView() {
-  document.getElementById('auth-view').style.display = 'flex';
-  document.getElementById('dashboard-view').style.display = 'none';
-  document.getElementById('case-selector-container').style.display = 'none';
-  document.getElementById('user-profile-badge').style.display = 'none';
-}
-
-function showDashboardView() {
-  document.getElementById('auth-view').style.display = 'none';
-  document.getElementById('dashboard-view').style.display = 'block';
-  document.getElementById('case-selector-container').style.display = 'flex';
-  document.getElementById('user-profile-badge').style.display = 'flex';
-
-  if (state.user) {
-    document.getElementById('user-email-display').textContent = state.user.email;
   }
 }
 
 // Global Banner Notifications
 function showAlert(message, type = 'warning', timeoutMs = 6000) {
   const alertEl = document.getElementById('dashboard-alert');
+  if (!alertEl) return;
   alertEl.className = `alert alert-${type}`;
   alertEl.textContent = message;
   alertEl.style.display = 'block';
@@ -145,24 +165,15 @@ function showAlert(message, type = 'warning', timeoutMs = 6000) {
 // Initialization Flow
 async function initApp() {
   setupEventListeners();
+  setupPipelineCoordinator();
 
-  // Pre-fill login form with dev credentials for convenience
-  const emailInput = document.getElementById('login-email');
-  const passInput = document.getElementById('login-password');
-  if (emailInput && !emailInput.value) {
-    emailInput.value = localStorage.getItem('forensiq_email') || DEV_CREDENTIALS.email;
-  }
-  if (passInput && !passInput.value) {
-    passInput.value = localStorage.getItem('forensiq_password') || DEV_CREDENTIALS.password;
-  }
-
-  // Sample evidence dropdown — fetch available samples and update download link when selection changes
+  // Sample evidence dropdown
   const sampleSelect = document.getElementById('sample-evidence-select');
   const sampleDownloadLink = document.getElementById('btn-download-example');
-  
+
   if (sampleSelect) {
     apiRequest('/examples').then(samples => {
-      sampleSelect.innerHTML = '<option value="">Select a sample…</option>';
+      sampleSelect.innerHTML = '<option value="">Select a sample\u2026</option>';
       samples.forEach(sample => {
         const option = document.createElement('option');
         option.value = sample.filename;
@@ -200,31 +211,118 @@ async function initApp() {
     console.warn('Backend is offline');
   }
 
-  if (state.token) {
-    try {
-      state.user = await apiRequest('/auth/me');
-      showDashboardView();
-      await loadInvestigations();
-    } catch {
-      handleAuthFailure();
+  // Setup Hash Routing (Phase 3)
+  window.addEventListener('hashchange', handleHashChange);
+
+  // Load investigations immediately — local single investigator mode
+  await loadInvestigations();
+}
+
+// URL Hash Router Handler
+async function handleHashChange() {
+  if (isUpdatingRouteInternally) return;
+
+  const { caseId, tab } = parseCurrentRoute();
+  const targetPaneId = TAB_MAP[tab] || 'tab-overview';
+
+  // 1. If route specifies a caseId different from active case
+  if (caseId && caseId !== state.activeInvestigationId) {
+    if (state.isPipelineRunning) {
+      showAlert('Pipeline is currently executing. Navigation is locked until execution completes.', 'warning');
+      updateRouteHash();
+      return;
     }
-  } else {
-    showAuthView();
+
+    try {
+      // Validate requested case with GET /api/v1/investigations/{id}
+      const inv = await apiRequest(`/investigations/${encodeURIComponent(caseId)}`);
+      state.investigationVersion++;
+      state.selectedEvidenceId = null;
+      renderEvidenceInspector(null);
+
+      state.activeInvestigationId = inv.id;
+      localStorage.setItem('forensiq_active_inv_id', inv.id);
+
+      // Ensure in list and dropdown
+      if (!state.investigations.some(i => i.id === inv.id)) {
+        state.investigations.push(inv);
+      }
+      const selectEl = document.getElementById('investigation-select');
+      if (selectEl) {
+        let opt = selectEl.querySelector(`option[value="${inv.id}"]`);
+        if (!opt) {
+          opt = document.createElement('option');
+          opt.value = inv.id;
+          opt.textContent = `[${inv.case_number}] ${inv.title}`;
+          selectEl.appendChild(opt);
+        }
+        selectEl.value = inv.id;
+      }
+
+      resetCaseScopedState();
+      switchTabInternal(targetPaneId);
+      togglePipelineControls(true);
+      await loadActiveInvestigationSummary();
+      await refreshActiveDestinationView();
+      return;
+    } catch (err) {
+      showAlert(`Investigation "${caseId}" could not be found or loaded: ${err.message}`, 'danger');
+      state.activeInvestigationId = null;
+      localStorage.removeItem('forensiq_active_inv_id');
+      renderEmptyInvestigation();
+      updateRouteHash('', 'overview');
+      return;
+    }
+  }
+
+  // 2. If route has no caseId, but cases exist
+  if (!caseId && state.investigations.length > 0) {
+    const firstCaseId = state.activeInvestigationId || state.investigations[0].id;
+    updateRouteHash(firstCaseId, tab);
+    return;
+  }
+
+  // 3. Same case, just tab switch
+  if (state.activeTab !== targetPaneId) {
+    switchTabInternal(targetPaneId);
+    await refreshActiveDestinationView();
   }
 }
 
-// Load Accessible Investigations
+// Load Investigations
 async function loadInvestigations() {
+  const route = parseCurrentRoute();
+
   try {
     const res = await apiRequest('/investigations?limit=100');
-    state.investigations = res.items;
+    state.investigations = res.items || [];
 
     const selectEl = document.getElementById('investigation-select');
     selectEl.innerHTML = '';
 
+    // If route specified a caseId, try direct lookup if not in top 100
+    let targetInv = null;
+    if (route.caseId) {
+      targetInv = state.investigations.find(i => i.id === route.caseId);
+      if (!targetInv) {
+        try {
+          targetInv = await apiRequest(`/investigations/${encodeURIComponent(route.caseId)}`);
+          if (targetInv && targetInv.id) {
+            state.investigations.unshift(targetInv);
+          }
+        } catch {
+          showAlert(`Requested investigation "${route.caseId}" could not be found.`, 'warning');
+          targetInv = null;
+        }
+      }
+    }
+
     if (state.investigations.length === 0) {
       selectEl.innerHTML = '<option value="">No investigations yet</option>';
+      state.activeInvestigationId = null;
+      localStorage.removeItem('forensiq_active_inv_id');
       renderEmptyInvestigation();
+      updateRouteHash('', route.tab || 'overview');
       return;
     }
 
@@ -235,37 +333,268 @@ async function loadInvestigations() {
       selectEl.appendChild(opt);
     });
 
-    // Select active case or first available
-    if (state.activeInvestigationId && state.investigations.some(i => i.id === state.activeInvestigationId)) {
-      selectEl.value = state.activeInvestigationId;
+    if (targetInv) {
+      state.activeInvestigationId = targetInv.id;
+    } else if (state.activeInvestigationId && state.investigations.some(i => i.id === state.activeInvestigationId)) {
+      // Keep preserved id
     } else {
       state.activeInvestigationId = state.investigations[0].id;
-      selectEl.value = state.activeInvestigationId;
     }
+
+    selectEl.value = state.activeInvestigationId;
     localStorage.setItem('forensiq_active_inv_id', state.activeInvestigationId);
 
+    // Switch to route's tab or overview
+    const initialPane = TAB_MAP[route.tab] || 'tab-overview';
+    switchTabInternal(initialPane);
+    updateRouteHash(state.activeInvestigationId, route.tab || 'overview');
+
+    togglePipelineControls(true);
     await loadActiveInvestigationSummary();
+    await refreshActiveDestinationView();
   } catch (err) {
     showAlert(`Failed to load investigations: ${err.message}`, 'danger');
   }
 }
 
-// Load Active Investigation Summary (Unified Dashboard Endpoint)
+function resetCaseScopedState() {
+  state.selectedEvidenceId = null;
+  state.currentEvidenceItems = [];
+  state.evidencePagination.offset = 0;
+  state.evidencePagination.source_id = '';
+  state.evidencePagination.event_type = '';
+  state.evidencePagination.user_id = '';
+  state.evidencePagination.device_id = '';
+  state.sourcesCache.clear();
+
+  // Reset filter inputs if in DOM
+  const srcFilter = document.getElementById('filter-evidence-source');
+  if (srcFilter) srcFilter.value = '';
+  const typeFilter = document.getElementById('filter-evidence-event-type');
+  if (typeFilter) typeFilter.value = '';
+  const userFilter = document.getElementById('filter-evidence-user');
+  if (userFilter) userFilter.value = '';
+  const devFilter = document.getElementById('filter-evidence-device');
+  if (devFilter) devFilter.value = '';
+
+  renderEvidenceInspector(null);
+}
+
+// Load Active Investigation Summary (with investigation-switch concurrency guard)
 async function loadActiveInvestigationSummary() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.summary;
 
   try {
-    const summary = await apiRequest(`/investigations/${state.activeInvestigationId}/summary`);
+    const summary = await apiRequest(`/investigations/${currentInvId}/summary`);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.summary) return; // Stale response guard
     state.summary = summary;
     renderDashboard(summary);
   } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.summary) return;
     showAlert(`Failed to load investigation summary: ${err.message}`, 'danger');
+  }
+}
+
+// ==========================================================================
+// Modal Helpers & Case/Evidence Creation Dialog Triggers
+// ==========================================================================
+let lastFocusedElement = null;
+
+function getFocusableElements(container) {
+  if (!container) return [];
+  return Array.from(container.querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter(el => {
+    return el.offsetParent !== null || el.offsetWidth > 0 || el.offsetHeight > 0;
+  });
+}
+
+window.openModal = function(modalId) {
+  const triggerEl = document.activeElement;
+  lastFocusedElement = triggerEl;
+  const modal = typeof modalId === 'string' ? document.getElementById(modalId) : modalId;
+  if (modal) {
+    modal._triggerElement = triggerEl;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+    const focusable = getFocusableElements(modal);
+    if (focusable.length > 0) {
+      focusable[0].focus();
+    } else {
+      modal.setAttribute('tabindex', '-1');
+      modal.focus();
+    }
+  }
+};
+
+window.closeModal = function(modal) {
+  const modalEl = typeof modal === 'string' ? document.getElementById(modal) : modal;
+  if (modalEl) {
+    modalEl.style.display = 'none';
+    modalEl.setAttribute('aria-hidden', 'true');
+    const restoreEl = modalEl._triggerElement || lastFocusedElement;
+    if (restoreEl && typeof restoreEl.focus === 'function') {
+      restoreEl.focus();
+    }
+    modalEl._triggerElement = null;
+    lastFocusedElement = null;
+  }
+};
+
+function openNewCaseModal() {
+  if (state.isPipelineRunning) {
+    showAlert('Pipeline is executing. Please wait for completion before creating cases.', 'warning');
+    return;
+  }
+  const form = document.getElementById('form-new-case');
+  if (form) form.reset();
+  const errAlert = document.getElementById('new-case-error');
+  if (errAlert) errAlert.style.display = 'none';
+
+  window.openModal('modal-new-case');
+}
+
+function openImportEvidenceModal() {
+  if (state.isPipelineRunning) {
+    showAlert('Pipeline is currently executing. Wait for completion before importing evidence.', 'warning');
+    return;
+  }
+  if (!state.activeInvestigationId) {
+    showAlert('No active investigation. Please create or select a case first.', 'warning');
+    openNewCaseModal();
+    return;
+  }
+  const form = document.getElementById('form-import-evidence');
+  if (form) form.reset();
+  const errAlert = document.getElementById('import-error');
+  if (errAlert) errAlert.style.display = 'none';
+  const succAlert = document.getElementById('import-success');
+  if (succAlert) succAlert.style.display = 'none';
+
+  window.openModal('modal-import-evidence');
+}
+
+// State-Aware Guided Investigation Workflow Guide
+function updateWorkflowGuide() {
+  const step1 = document.getElementById('wf-step-1');
+  const step2 = document.getElementById('wf-step-2');
+  const step3 = document.getElementById('wf-step-3');
+  const step4 = document.getElementById('wf-step-4');
+  const step5 = document.getElementById('wf-step-5');
+
+  const status1 = document.getElementById('wf-status-1');
+  const status2 = document.getElementById('wf-status-2');
+  const status3 = document.getElementById('wf-status-3');
+  const status4 = document.getElementById('wf-status-4');
+  const status5 = document.getElementById('wf-status-5');
+
+  const hintEl = document.getElementById('workflow-step-hint');
+  const actionBtn = document.getElementById('workflow-action-btn');
+
+  if (!step1 || !actionBtn) return;
+
+  const hasCase = Boolean(state.activeInvestigationId);
+  const totalSources = state.summary ? state.summary.total_sources : state.sourcesCache.size;
+  const hasSources = totalSources > 0;
+  const totalEvidence = state.summary ? state.summary.total_evidence : 0;
+  const totalFindings = state.summary ? (state.summary.total_findings + state.summary.total_anomalies) : 0;
+  const totalPrio = state.summary ? state.summary.total_priority_results : 0;
+  const isAnalyzed = totalEvidence > 0 && (totalPrio > 0 || totalFindings > 0);
+  const isRunning = state.isPipelineRunning;
+
+  // Reset all step classes to pending
+  [step1, step2, step3, step4, step5].forEach(el => {
+    el.className = 'workflow-step pending';
+  });
+
+  if (!hasCase) {
+    // Step 1 active: Select or create case
+    step1.className = 'workflow-step active';
+    if (status1) status1.textContent = 'Active';
+    if (status2) status2.textContent = 'Pending';
+    if (status3) status3.textContent = 'Pending';
+    if (status4) status4.textContent = 'Pending';
+    if (status5) status5.textContent = 'Pending';
+
+    if (hintEl) hintEl.textContent = 'Step 1 of 5: Select Case';
+    actionBtn.textContent = '+ New Case';
+    actionBtn.disabled = false;
+    actionBtn.onclick = openNewCaseModal;
+  } else if (!hasSources) {
+    // Step 1 done, Step 2 active: Upload evidence
+    step1.className = 'workflow-step completed';
+    if (status1) status1.textContent = '✓ Done';
+    step2.className = 'workflow-step active';
+    if (status2) status2.textContent = 'Active';
+    if (status3) status3.textContent = 'Pending';
+    if (status4) status4.textContent = 'Pending';
+    if (status5) status5.textContent = 'Pending';
+
+    if (hintEl) hintEl.textContent = 'Step 2 of 5: Upload Evidence';
+    actionBtn.textContent = 'Import Evidence CSV';
+    actionBtn.disabled = false;
+    actionBtn.onclick = openImportEvidenceModal;
+  } else if (isRunning) {
+    // Pipeline is actively executing (Step 3 running)
+    step1.className = 'workflow-step completed';
+    if (status1) status1.textContent = '✓ Done';
+    step2.className = 'workflow-step completed';
+    if (status2) status2.textContent = '✓ Done';
+    step3.className = 'workflow-step active';
+    if (status3) status3.textContent = 'Running...';
+    if (status4) status4.textContent = 'Pending';
+    if (status5) status5.textContent = 'Pending';
+
+    if (hintEl) hintEl.textContent = 'Step 3: Analyzing...';
+    actionBtn.textContent = 'Analyzing...';
+    actionBtn.disabled = true;
+    actionBtn.onclick = null;
+  } else if (!isAnalyzed) {
+    // Step 1 & 2 done, Step 3 ready: Run Analyze Investigation
+    step1.className = 'workflow-step completed';
+    if (status1) status1.textContent = '✓ Done';
+    step2.className = 'workflow-step completed';
+    if (status2) status2.textContent = '✓ Done';
+    step3.className = 'workflow-step active';
+    if (status3) status3.textContent = 'Ready';
+    if (status4) status4.textContent = 'Pending';
+    if (status5) status5.textContent = 'Pending';
+
+    if (hintEl) hintEl.textContent = 'Step 3 of 5: Ready to Analyze';
+    actionBtn.textContent = 'Analyze Investigation';
+    actionBtn.disabled = false;
+    actionBtn.onclick = () => {
+      runFullAnalysisPipeline();
+    };
+  } else {
+    // Analysis completed! Steps 1, 2, 3 completed. Step 4 & 5 available.
+    step1.className = 'workflow-step completed';
+    if (status1) status1.textContent = '✓ Done';
+    step2.className = 'workflow-step completed';
+    if (status2) status2.textContent = '✓ Done';
+    step3.className = 'workflow-step completed';
+    if (status3) status3.textContent = '✓ Done';
+    step4.className = 'workflow-step completed';
+    if (status4) status4.textContent = `${totalFindings} Finding${totalFindings === 1 ? '' : 's'}`;
+    step5.className = 'workflow-step active';
+    if (status5) status5.textContent = 'Ready';
+
+    if (hintEl) hintEl.textContent = 'Ready: Review & Report';
+    actionBtn.textContent = 'Download PDF Report';
+    actionBtn.disabled = false;
+    actionBtn.onclick = () => {
+      const findingsBtn = document.getElementById('btn-findings-download-report');
+      const findingsSpinner = document.getElementById('btn-findings-download-report-spinner');
+      downloadInvestigationReport(findingsBtn, findingsSpinner);
+    };
   }
 }
 
 // Render Dashboard Data
 function renderDashboard(s) {
-  // Case Header
   document.getElementById('case-title-display').textContent = s.investigation.title;
   document.getElementById('case-number-badge').textContent = s.investigation.case_number;
   const statusBadge = document.getElementById('case-status-badge');
@@ -276,78 +605,122 @@ function renderDashboard(s) {
   document.getElementById('case-desc-display').textContent = s.investigation.description || 'No case description recorded.';
   document.getElementById('case-created-display').textContent = new Date(s.investigation.created_at).toLocaleString();
 
-  // Show report download button now that a real case is loaded
-  const reportBtn = document.getElementById('btn-download-report');
-  if (reportBtn) reportBtn.style.display = 'inline-block';
+  const reportBtnFindings = document.getElementById('btn-findings-download-report');
+  if (reportBtnFindings) reportBtnFindings.disabled = false;
 
-  // Metrics Grid
-  document.getElementById('metric-sources').textContent = s.total_sources;
-  document.getElementById('metric-evidence').textContent = s.total_evidence;
-  document.getElementById('metric-findings').textContent = s.total_findings;
-  document.getElementById('metric-anomalies').textContent = s.total_anomalies;
-  document.getElementById('metric-relationships').textContent = s.total_relationships;
-  document.getElementById('metric-activities').textContent = s.total_activities;
+  const elSources = document.getElementById('metric-sources');
+  if (elSources) elSources.textContent = s.total_sources;
+  const elEvidence = document.getElementById('metric-evidence');
+  if (elEvidence) elEvidence.textContent = s.total_evidence;
+  const elFindings = document.getElementById('metric-findings');
+  if (elFindings) elFindings.textContent = (s.total_findings || 0) + (s.total_anomalies || 0);
+  const elActivities = document.getElementById('metric-activities');
+  if (elActivities) elActivities.textContent = s.total_activities;
 
-  // Tier Breakdown Bars & Counts
+  const quickStatus = document.getElementById('case-pipeline-quick-status');
+  if (quickStatus) {
+    quickStatus.textContent = s.total_findings > 0 ? `${s.total_findings} FINDINGS` : (s.total_sources > 0 ? 'SOURCES READY' : 'EMPTY');
+    quickStatus.className = `badge font-mono ${s.total_findings > 0 ? 'badge-danger' : 'badge-mono'}`;
+  }
+
+  updateReportPreview(s);
+
   const tiers = s.priority_tier_counts;
-  const totalPrio = s.total_priority_results || 1; // avoid / 0
+  const totalPrio = s.total_priority_results || 1;
 
   document.getElementById('count-critical').textContent = tiers.CRITICAL;
   document.getElementById('bar-critical').style.width = `${(tiers.CRITICAL / totalPrio) * 100}%`;
-
   document.getElementById('count-high').textContent = tiers.HIGH;
   document.getElementById('bar-high').style.width = `${(tiers.HIGH / totalPrio) * 100}%`;
-
   document.getElementById('count-medium').textContent = tiers.MEDIUM;
   document.getElementById('bar-medium').style.width = `${(tiers.MEDIUM / totalPrio) * 100}%`;
-
   document.getElementById('count-low').textContent = tiers.LOW;
   document.getElementById('bar-low').style.width = `${(tiers.LOW / totalPrio) * 100}%`;
-
   document.getElementById('count-info').textContent = tiers.INFORMATIONAL;
   document.getElementById('bar-info').style.width = `${(tiers.INFORMATIONAL / totalPrio) * 100}%`;
 
-  // Top Priority Table
   renderTopPriorityTable(s.top_priority_results);
-
-  // Evidence Sources Table
   renderSourcesTable(s.sources);
+  updateWorkflowGuide();
+}
+
+function updateReportPreview(s) {
+  const caseEl = document.getElementById('report-preview-case');
+  const srcEl = document.getElementById('report-preview-sources');
+  const threatsEl = document.getElementById('report-preview-threats');
+  const actEl = document.getElementById('report-preview-activities');
+
+  if (!s || !s.investigation) {
+    if (caseEl) caseEl.textContent = '\u2014';
+    if (srcEl) srcEl.textContent = '0 files';
+    if (threatsEl) threatsEl.textContent = '0 findings';
+    if (actEl) actEl.textContent = '0 threads';
+    return;
+  }
+
+  if (caseEl) caseEl.textContent = s.investigation.case_number || '\u2014';
+  if (srcEl) srcEl.textContent = `${s.total_sources || 0} files (${s.total_evidence || 0} events)`;
+  if (threatsEl) threatsEl.textContent = `${s.total_findings || 0} findings`;
+  if (actEl) actEl.textContent = `${s.total_activities || 0} threads`;
 }
 
 function renderEmptyInvestigation() {
   document.getElementById('case-title-display').textContent = 'No active investigation';
-  document.getElementById('case-number-badge').textContent = '—';
-  
+  document.getElementById('case-number-badge').textContent = '\u2014';
+
   const statusBadge = document.getElementById('case-status-badge');
   if (statusBadge) {
     statusBadge.textContent = '';
     statusBadge.style.display = 'none';
   }
-  
+
   document.getElementById('case-desc-display').textContent = 'Please select a case from the dropdown or click "+ New Case" to create your first investigation and begin forensic triage.';
-  document.getElementById('case-created-display').textContent = '—';
-  
-  // Hide report button when there is no active case
-  const reportBtn = document.getElementById('btn-download-report');
-  if (reportBtn) reportBtn.style.display = 'none';
-  
-  // Use dash to represent "no data available" cleanly
-  document.getElementById('metric-sources').textContent = '—';
-  document.getElementById('metric-evidence').textContent = '—';
-  document.getElementById('metric-findings').textContent = '—';
-  document.getElementById('metric-anomalies').textContent = '—';
-  document.getElementById('metric-relationships').textContent = '—';
-  document.getElementById('metric-activities').textContent = '—';
+  document.getElementById('case-created-display').textContent = '\u2014';
 
-  // Set default pipeline status for empty state
+  const reportBtnFindings = document.getElementById('btn-findings-download-report');
+  if (reportBtnFindings) reportBtnFindings.disabled = true;
+
+  const elSources = document.getElementById('metric-sources');
+  if (elSources) elSources.textContent = '\u2014';
+  const elEvidence = document.getElementById('metric-evidence');
+  if (elEvidence) elEvidence.textContent = '\u2014';
+  const elFindings = document.getElementById('metric-findings');
+  if (elFindings) elFindings.textContent = '\u2014';
+  const elActivities = document.getElementById('metric-activities');
+  if (elActivities) elActivities.textContent = '\u2014';
+
+  const quickStatus = document.getElementById('case-pipeline-quick-status');
+  if (quickStatus) {
+    quickStatus.textContent = 'NO CASE';
+    quickStatus.className = 'badge badge-mono font-mono';
+  }
+
+  updateReportPreview(null);
+
   setPipelineState('No Case Selected', 'info');
+  setPipelineBannerLog('No active investigation. Select or create an investigation case to enable pipeline analysis.', 'normal');
+  resetAllStageChips();
 
-  // Clear tier bars
+  // Disable analysis triggers while keeping case creation, case selector, and navigation enabled
+  const runFullBtn = document.getElementById('btn-run-full-analysis');
+  const runSingleBtn = document.getElementById('btn-run-single-stage');
+  const selectStage = document.getElementById('select-pipeline-stage');
+  const newCaseBtn = document.getElementById('btn-new-case');
+  const importBtnHeader = document.getElementById('btn-action-import');
+  const importBtnTab = document.getElementById('btn-evidence-tab-import');
+
+  if (runFullBtn) runFullBtn.disabled = true;
+  if (runSingleBtn) runSingleBtn.disabled = true;
+  if (selectStage) selectStage.disabled = true;
+  if (newCaseBtn) newCaseBtn.disabled = false;
+  if (importBtnHeader) importBtnHeader.disabled = false;
+  if (importBtnTab) importBtnTab.disabled = false;
+
   ['critical','high','medium','low','info'].forEach(t => {
     const bar = document.getElementById(`bar-${t}`);
     const cnt = document.getElementById(`count-${t}`);
     if (bar) bar.style.width = '0%';
-    if (cnt) cnt.textContent = '—';
+    if (cnt) cnt.textContent = '\u2014';
   });
 
   const tbody = document.getElementById('top-priority-tbody');
@@ -356,16 +729,41 @@ function renderEmptyInvestigation() {
   }
   const sTbody = document.getElementById('sources-tbody');
   if (sTbody) {
-    sTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No active case. Import forensic evidence to view sources.</td></tr>';
+    sTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No active case. Import forensic evidence to view sources.</td></tr>';
   }
+  const actTbody = document.getElementById('activities-tbody');
+  if (actTbody) actTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No active case.</td></tr>';
+  const corrTbody = document.getElementById('correlations-tbody');
+  if (corrTbody) corrTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active case.</td></tr>';
+  const mlTbody = document.getElementById('ml-anomalies-tbody');
+  if (mlTbody) mlTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active case.</td></tr>';
+  const prioTbody = document.getElementById('all-prio-tbody');
+  if (prioTbody) prioTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
+  const findTbody = document.getElementById('findings-tbody');
+  if (findTbody) findTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
+  const evTbody = document.getElementById('evidence-records-tbody');
+  if (evTbody) evTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
+  const pageInfo = document.getElementById('evidence-page-info');
+  if (pageInfo) pageInfo.textContent = 'Page 1 of 1';
+  const recordSummary = document.getElementById('evidence-record-summary');
+  if (recordSummary) recordSummary.textContent = 'Showing 0 records';
+  const srcSelect = document.getElementById('filter-evidence-source');
+  if (srcSelect) srcSelect.innerHTML = '<option value="">All Evidence Sources</option>';
+  const btnPrev = document.getElementById('btn-evidence-prev');
+  if (btnPrev) btnPrev.disabled = true;
+  const btnNext = document.getElementById('btn-evidence-next');
+  if (btnNext) btnNext.disabled = true;
+
+  updateWorkflowGuide();
 }
 
 function renderTopPriorityTable(results) {
   const tbody = document.getElementById('top-priority-tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
   if (!results || results.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No prioritization results yet. Run "Prioritize Evidence" or "Prioritize Activities" from the pipeline bar above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No prioritization results yet. Click "Analyze Investigation" to process evidence and compute priorities.</td></tr>';
     return;
   }
 
@@ -377,7 +775,7 @@ function renderTopPriorityTable(results) {
       <td><span class="badge badge-mono">${r.target_type}</span></td>
       <td>
         <div style="font-size: 11px; max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          ${r.explanation_text}
+          ${escapeHtml(r.explanation_text)}
         </div>
       </td>
       <td>
@@ -390,24 +788,65 @@ function renderTopPriorityTable(results) {
 
 function renderSourcesTable(sources) {
   const tbody = document.getElementById('sources-tbody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
   if (!sources || sources.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No evidence sources ingested yet. Click "Import Evidence" to upload a CSV, JSON, or JSONL forensic log.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No evidence sources ingested yet. Click "+ Import Evidence" to upload a CSV, JSON, or JSONL forensic log.</td></tr>';
     return;
   }
 
   sources.forEach(s => {
     const tr = document.createElement('tr');
+    const rawHash = s.sha256_hash || '';
+    const hashDisplay = rawHash
+      ? (rawHash.length > 20 ? `${rawHash.substring(0, 8)}…${rawHash.substring(rawHash.length - 8)}` : rawHash)
+      : '—';
+    const copyBtnHtml = rawHash
+      ? `<button type="button" class="btn btn-ghost btn-xs btn-copy-hash" onclick="copyDigest('${escapeHtml(rawHash)}', this)" title="Copy SHA-256 digest recorded at ingestion" aria-label="Copy SHA-256 digest">
+           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+         </button>`
+      : '';
+    const cachedIntegrity = state.sourcesIntegrityCache?.get(s.id);
+    let integrityBadgeHtml = '';
+    if (cachedIntegrity) {
+      let bClass = 'badge-mono';
+      let icon = '●';
+      if (cachedIntegrity.status === 'VERIFIED') {
+        bClass = 'badge-open';
+        icon = '✓';
+      } else if (cachedIntegrity.status === 'INTEGRITY_MISMATCH') {
+        bClass = 'alert-danger';
+        icon = '⚠';
+      } else {
+        bClass = 'alert-warning';
+        icon = '—';
+      }
+      integrityBadgeHtml = `<span class="badge ${bClass} text-xs" style="cursor: pointer; margin-left: 4px;" title="Click to view cryptographic verification details" onclick="viewSourceIntegrityModal('${escapeHtml(s.id)}')">${icon} ${escapeHtml(cachedIntegrity.status)}</span>`;
+    }
+
     tr.innerHTML = `
-      <td><strong>${s.filename}</strong></td>
-      <td><span class="badge badge-mono">${s.file_format}</span></td>
-      <td class="font-mono text-sm" title="${s.sha256_hash}">${s.sha256_hash.substring(0, 16)}...</td>
+      <td><strong>${escapeHtml(s.filename)}</strong></td>
+      <td><span class="badge badge-mono">${escapeHtml(s.file_format)}</span></td>
+      <td>
+        <div class="hash-cell" style="display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span class="font-mono text-sm hash-val" title="SHA-256 Digest (Recorded at Ingestion): ${escapeHtml(rawHash)}">${escapeHtml(hashDisplay)}</span>
+          ${copyBtnHtml}
+          <button type="button" class="btn btn-ghost btn-xs btn-verify-hash" id="btn-verify-source-${escapeHtml(s.id)}" onclick="verifySourceIntegrity('${escapeHtml(s.id)}')" title="Verify stored file content against recorded SHA-256 digest" style="padding: 1px 5px; font-size: 10px;">Verify</button>
+          <span id="verify-badge-${escapeHtml(s.id)}">${integrityBadgeHtml}</span>
+        </div>
+      </td>
       <td>${formatBytes(s.file_size_bytes)}</td>
       <td class="font-mono">${s.total_records}</td>
       <td class="font-mono">${s.normalized_records}</td>
-      <td><span class="badge ${s.ingestion_status === 'COMPLETED' ? 'badge-open' : 'badge-mono'}">${s.ingestion_status}</span></td>
-      <td class="text-sm">${new Date(s.ingested_at).toLocaleString()}</td>
+      <td><span class="badge ${s.ingestion_status === 'COMPLETED' ? 'badge-open' : 'badge-mono'}">${escapeHtml(s.ingestion_status)}</span></td>
+      <td class="text-sm">${s.ingested_at ? new Date(s.ingested_at).toLocaleString() : '—'}</td>
+      <td>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="btn btn-secondary btn-sm" onclick="triggerNormalizeSource('${escapeHtml(s.id)}')" title="Normalize this evidence source">Normalize</button>
+          <button class="btn btn-ghost btn-sm" onclick="exploreSourceRecords('${escapeHtml(s.id)}')" title="Filter and view records from this source in the Normalized Records Explorer">Explore</button>
+        </div>
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -450,11 +889,11 @@ function formatEnum(val) {
 function compactId(id) {
   if (!id) return '';
   const str = String(id);
-  if (str.length > 12) return str.substring(0, 8) + '…' + str.substring(str.length - 4);
+  if (str.length > 12) return str.substring(0, 8) + '\u2026' + str.substring(str.length - 4);
   return str;
 }
 
-/// Detail Inspection Modal Helper with Structured Forensic Explainability
+// Detail Inspection Modal
 window.viewDetailModal = function(title, dataObj) {
   const modal = document.getElementById('modal-detail');
   const titleEl = document.getElementById('modal-detail-title');
@@ -463,18 +902,21 @@ window.viewDetailModal = function(title, dataObj) {
   const provPanel = document.getElementById('modal-provenance-panel');
   const genericPanel = document.getElementById('modal-generic-panel');
   const genericContent = document.getElementById('modal-generic-content');
+  const proofPanel = document.getElementById('modal-finding-proof-panel');
+  const evDetailPanel = document.getElementById('modal-evidence-detail-panel');
 
   titleEl.textContent = `${title} Inspection`;
   tierBadge.className = 'badge';
   tierBadge.textContent = '';
   tierBadge.style.display = 'none';
-  
+
   explainPanel.style.display = 'none';
   provPanel.style.display = 'none';
   genericPanel.style.display = 'none';
+  if (proofPanel) proofPanel.style.display = 'none';
+  if (evDetailPanel) evDetailPanel.style.display = 'none';
   genericContent.innerHTML = '';
 
-  // Check if data is a PriorityResult
   if (dataObj && typeof dataObj.priority_score === 'number') {
     tierBadge.textContent = dataObj.priority_tier || 'UNKNOWN';
     tierBadge.className = `badge ${getTierBadgeClass(dataObj.priority_tier)}`;
@@ -484,7 +926,6 @@ window.viewDetailModal = function(title, dataObj) {
     document.getElementById('modal-score-value').textContent = dataObj.priority_score.toFixed(1);
     document.getElementById('modal-explanation-text').textContent = dataObj.explanation_text || 'No automated narrative available.';
 
-    // Populate Factor Breakdown Grid
     const factorGrid = document.getElementById('modal-factor-grid');
     factorGrid.innerHTML = '';
     const breakdown = dataObj.factor_breakdown || {};
@@ -503,12 +944,10 @@ window.viewDetailModal = function(title, dataObj) {
       factors.forEach(f => {
         const card = document.createElement('div');
         card.className = 'factor-card';
-        
         const displayName = nameMap[f.name] || f.name.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
         const contributionStr = (f.contribution >= 0 ? '+' : '') + f.contribution.toFixed(2);
         const weightStr = (f.weight * 100).toFixed(0) + '%';
         const valueStr = typeof f.normalized_value === 'number' ? Number(f.normalized_value.toFixed(4)).toString() : String(f.normalized_value);
-        
         card.innerHTML = `
           <strong class="factor-name" style="text-transform: none; color: var(--text-primary); font-size: 11px; font-weight: 600; display: block; margin-bottom: 2px;">${escapeHtml(displayName)}</strong>
           <span class="factor-val" style="color: var(--prio-high); font-size: 12px; font-weight: 600; display: block;">Contribution: ${escapeHtml(contributionStr)}</span>
@@ -520,7 +959,6 @@ window.viewDetailModal = function(title, dataObj) {
       });
     }
 
-    // Populate Provenance Chain
     provPanel.style.display = 'block';
     const chainEl = document.getElementById('modal-provenance-chain');
     chainEl.innerHTML = `
@@ -545,14 +983,11 @@ window.viewDetailModal = function(title, dataObj) {
       for (const [key, val] of Object.entries(dataObj)) {
         if (val === null || val === undefined || val === '') continue;
         if (typeof val === 'object' && Object.keys(val).length === 0) continue;
-        
         let formattedVal = val;
         if (typeof val === 'object') {
           formattedVal = Object.entries(val).map(([k, v]) => `${k}: ${v}`).join(' | ');
         }
-        
         const formattedKey = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-        
         genericContent.innerHTML += `
           <div style="display: flex; flex-direction: column; padding-bottom: 6px; border-bottom: 1px solid var(--border-subtle);">
             <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary);">${escapeHtml(formattedKey)}</span>
@@ -570,19 +1005,9 @@ window.viewDetailModal = function(title, dataObj) {
   else document.getElementById('modal-detail').style.display = 'flex';
 };
 
-window.triggerNormalizeSource = async function(sourceId) {
-  try {
-    setPipelineState('Running Normalization...', 'warning');
-    showAlert(`Normalizing evidence source ${sourceId.substring(0, 8)}...`, 'warning');
-    const res = await apiRequest(`/evidence/sources/${sourceId}/normalize`, { method: 'POST' });
-    showAlert(`Normalization completed: ${res.normalized_records} records normalized.`, 'success');
-    await loadActiveInvestigationSummary();
-    setPipelineState('Ready', 'success');
-  } catch (err) {
-    showAlert(`Normalization failed: ${err.message}`, 'danger');
-    setPipelineState('Error', 'danger');
-  }
-};
+// ==========================================================================
+// Pipeline Coordinator UI Helpers & Execution Engine
+// ==========================================================================
 
 function setPipelineState(statusText, badgeClass = 'mono') {
   const badge = document.getElementById('pipeline-state-badge');
@@ -590,29 +1015,759 @@ function setPipelineState(statusText, badgeClass = 'mono') {
     badge.textContent = statusText;
     badge.className = `badge badge-${badgeClass}`;
   }
+}
 
-  // Define keyword mappings to identify which stage is active/running
-  const btnMap = {
-    'import': ['Ingesting', 'Import'],
-    'normalize': ['Normalize', 'Normalizing'],
-    'detect': ['Detections', 'Detect'],
-    'ml': ['ML Anomaly', 'ML analysis'],
-    'correlate': ['Correlating', 'Correlation'],
-    'activities': ['Clustering', 'Activity formation'],
-    'prioritize-artifact': ['Prioritize Evidence', 'Prioritizing Evidence'],
-    'prioritize-activity': ['Prioritize Activities', 'Prioritizing Activities']
+function setPipelineBannerLog(message, type = 'normal') {
+  const banner = document.getElementById('pipeline-log-banner');
+  if (!banner) return;
+  banner.className = `pipeline-log-banner text-sm ${type === 'running' ? 'log-running' : type === 'success' ? 'log-success' : type === 'error' ? 'log-error' : 'text-muted'}`;
+  banner.textContent = message;
+}
+
+function setStageChipState(chipId, status, tooltip = '') {
+  const chip = document.getElementById(chipId);
+  if (!chip) return;
+  chip.className = `stage-chip chip-${status}`;
+  if (tooltip) chip.title = tooltip;
+  const indicator = chip.querySelector('.chip-indicator');
+  if (indicator) {
+    if (status === 'completed') indicator.textContent = '✓';
+    else if (status === 'running') indicator.textContent = '●';
+    else if (status === 'skipped') indicator.textContent = '⊘';
+    else if (status === 'blocked') indicator.textContent = '⏸';
+    else if (status === 'partial') indicator.textContent = '◐';
+    else if (status === 'failed') indicator.textContent = '✗';
+    else indicator.textContent = '●';
+  }
+}
+
+function resetAllStageChips() {
+  PIPELINE_STAGES.forEach(s => setStageChipState(s.chipId, 'idle', s.name));
+}
+
+function togglePipelineControls(enabled) {
+  const runFullBtn = document.getElementById('btn-run-full-analysis');
+  const runSingleBtn = document.getElementById('btn-run-single-stage');
+  const selectStage = document.getElementById('select-pipeline-stage');
+  const caseSelect = document.getElementById('investigation-select');
+  const newCaseBtn = document.getElementById('btn-new-case');
+  const importBtnHeader = document.getElementById('btn-action-import');
+  const importBtnTab = document.getElementById('btn-evidence-tab-import');
+  const exampleImportBtn = document.getElementById('btn-import-example-evidence');
+  const wfActionBtn = document.getElementById('workflow-action-btn');
+
+  const hasCase = Boolean(state.activeInvestigationId);
+  const isRunning = Boolean(state.isPipelineRunning);
+
+  // Analysis pipeline execution triggers: only enabled when NOT running and active case exists
+  if (runFullBtn) runFullBtn.disabled = !enabled || !hasCase || isRunning;
+  if (runSingleBtn) runSingleBtn.disabled = !enabled || !hasCase || isRunning;
+  if (selectStage) selectStage.disabled = !enabled || !hasCase || isRunning;
+
+  // New Case creation is ONLY disabled during active pipeline run
+  if (newCaseBtn) newCaseBtn.disabled = isRunning;
+
+  // Case selection dropdown: locked only during active pipeline run
+  if (caseSelect) caseSelect.disabled = isRunning;
+
+  // Evidence import controls: locked only during active pipeline run
+  if (importBtnHeader) importBtnHeader.disabled = isRunning;
+  if (importBtnTab) importBtnTab.disabled = isRunning;
+  if (exampleImportBtn) exampleImportBtn.disabled = isRunning;
+
+  // Workflow guide action: disabled only during active pipeline run
+  if (wfActionBtn && isRunning) {
+    wfActionBtn.disabled = true;
+  }
+}
+
+// Full Analysis Pipeline Runner with Rigorous Prerequisite Semantics & Investigation Guard
+async function runFullAnalysisPipeline() {
+  if (state.isPipelineRunning) return;
+  if (!state.activeInvestigationId) {
+    showAlert('No active investigation. Please select or create a case first.', 'warning');
+    return;
+  }
+
+  const runInvestigationId = state.activeInvestigationId;
+  state.isPipelineRunning = true;
+  togglePipelineControls(false);
+  updateWorkflowGuide();
+  resetAllStageChips();
+  setPipelineState('Running...', 'warning');
+  setPipelineBannerLog('Initiating investigation analysis. Validating investigation sources...', 'running');
+
+  // Track outcomes for truthful overall status
+  const outcomes = {
+    normalize: 'idle',
+    detect: 'idle',
+    ml: 'idle',
+    correlate: 'idle',
+    activities: 'idle',
+    prioritize_baseline: 'idle',
+    prioritize_contextual: 'idle',
   };
 
-  Object.entries(btnMap).forEach(([key, terms]) => {
-    const btn = document.getElementById(`btn-action-${key}`);
-    if (btn) {
-      btn.classList.remove('running');
-      const isRunning = terms.some(t => statusText.includes(t));
-      if (isRunning) {
-        btn.classList.add('running');
+  try {
+    // Step 0: Enumerate sources belonging strictly to this investigation
+    const sources = await apiRequest(`/investigations/${runInvestigationId}/sources`);
+    if (state.activeInvestigationId !== runInvestigationId) return; // Stale guard
+
+    if (!sources || sources.length === 0) {
+      setPipelineState('No Sources', 'warning');
+      setPipelineBannerLog('No evidence sources found for this investigation. Import an evidence file first.', 'normal');
+      showAlert('No evidence sources ingested for this case. Click "Import Evidence" first.', 'warning');
+      state.isPipelineRunning = false;
+      togglePipelineControls(true);
+      return;
+    }
+
+    // =========================================================================
+    // Stage 1: Normalize Evidence Sources
+    // =========================================================================
+    setStageChipState('chip-stage-1', 'running');
+    setPipelineBannerLog(`[1/7] Normalizing ${sources.length} evidence source(s)...`, 'running');
+    let totalNormalized = 0;
+    let anyNormalizeFailed = false;
+    let normalizeErrorMsg = '';
+
+    for (const src of sources) {
+      try {
+        const res = await apiRequest(`/evidence/sources/${src.id}/normalize`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        totalNormalized += (res.normalized_records || 0);
+        if (res.status === 'FAILED') {
+          anyNormalizeFailed = true;
+          normalizeErrorMsg = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : `Failed to normalize ${src.filename}`;
+          break;
+        }
+      } catch (err) {
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        anyNormalizeFailed = true;
+        normalizeErrorMsg = err.message;
+        break;
       }
     }
-  });
+
+    if (anyNormalizeFailed) {
+      outcomes.normalize = 'failed';
+      setStageChipState('chip-stage-1', 'failed', `Normalization failed: ${normalizeErrorMsg}`);
+      // Block all downstream dependent stages
+      ['chip-stage-2','chip-stage-3','chip-stage-4','chip-stage-5','chip-stage-6','chip-stage-7'].forEach(id => {
+        setStageChipState(id, 'blocked', 'Blocked: Normalization failed');
+      });
+      setPipelineState('Blocked', 'danger');
+      setPipelineBannerLog(`Pipeline halted at Stage 1: Normalization failed (${normalizeErrorMsg}). Downstream stages blocked.`, 'error');
+      showAlert(`Pipeline halted: Normalization failed (${normalizeErrorMsg}).`, 'danger');
+      return;
+    }
+
+    if (totalNormalized === 0) {
+      // 0 records normalized: downstream stages have no inputs and are blocked
+      outcomes.normalize = 'skipped';
+      setStageChipState('chip-stage-1', 'skipped', 'Normalization completed with 0 usable records');
+      ['chip-stage-2','chip-stage-3','chip-stage-4','chip-stage-5','chip-stage-6','chip-stage-7'].forEach(id => {
+        setStageChipState(id, 'blocked', 'Blocked: 0 normalized records available');
+      });
+      setPipelineState('Blocked', 'warning');
+      setPipelineBannerLog('Pipeline halted: 0 normalized evidence records available. Downstream stages blocked.', 'error');
+      showAlert('Normalization yielded 0 records. Subsequent analysis stages blocked.', 'warning');
+      return;
+    }
+
+    outcomes.normalize = 'completed';
+    setStageChipState('chip-stage-1', 'completed', `Normalized ${totalNormalized} records`);
+
+    // Refetch sources to get accurate record counts per source
+    const activeSources = await apiRequest(`/investigations/${runInvestigationId}/sources`);
+    if (state.activeInvestigationId !== runInvestigationId) return;
+
+    // =========================================================================
+    // Stage 2: Deterministic Detections & IOCs
+    // =========================================================================
+    setStageChipState('chip-stage-2', 'running');
+    setPipelineBannerLog(`[2/7] Running deterministic detection rules & IOCs across ${activeSources.length} source(s)...`, 'running');
+    let totalFindings = 0;
+    let anyDetectionFailed = false;
+    let detectionErrorMsg = '';
+
+    for (const src of activeSources) {
+      try {
+        const res = await apiRequest(`/detection/sources/${src.id}/analyze-rules`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        totalFindings += (res.findings_created || 0);
+      } catch (err) {
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        anyDetectionFailed = true;
+        detectionErrorMsg = err.message;
+        break;
+      }
+    }
+
+    if (anyDetectionFailed) {
+      outcomes.detect = 'failed';
+      setStageChipState('chip-stage-2', 'failed', `Detections failed: ${detectionErrorMsg}`);
+      ['chip-stage-3','chip-stage-4','chip-stage-5','chip-stage-6','chip-stage-7'].forEach(id => {
+        setStageChipState(id, 'blocked', 'Blocked: Rule detection failed');
+      });
+      setPipelineState('Blocked', 'danger');
+      setPipelineBannerLog(`Pipeline halted at Stage 2: Detection failed (${detectionErrorMsg}).`, 'error');
+      showAlert(`Pipeline halted: Detection failed (${detectionErrorMsg}).`, 'danger');
+      return;
+    }
+
+    outcomes.detect = 'completed';
+    setStageChipState('chip-stage-2', 'completed', `Created ${totalFindings} findings`);
+
+    // =========================================================================
+    // Stage 3: ML Anomaly Analysis
+    // Precondition: >= 10 normalized records per source
+    // =========================================================================
+    setStageChipState('chip-stage-3', 'running');
+    setPipelineBannerLog(`[3/7] Running unsupervised ML anomaly analysis (threshold: >= 10 records)...`, 'running');
+    let mlCreated = 0;
+    let mlEligibleCount = 0;
+    let mlSkippedCount = 0;
+
+    for (const src of activeSources) {
+      const recCount = src.normalized_records || 0;
+      if (recCount < 10) {
+        mlSkippedCount++;
+        continue;
+      }
+      mlEligibleCount++;
+      const res = await apiRequest(`/ml/sources/${src.id}/analyze`, { method: 'POST' });
+      if (state.activeInvestigationId !== runInvestigationId) return;
+      if (res.status === 'INSUFFICIENT_DATA') {
+        mlSkippedCount++;
+      } else {
+        mlCreated += (res.findings_created || 0);
+      }
+    }
+
+    if (mlEligibleCount === 0) {
+      outcomes.ml = 'skipped';
+      setStageChipState('chip-stage-3', 'skipped', 'Skipped: All sources have < 10 normalized records');
+    } else if (mlSkippedCount > 0) {
+      outcomes.ml = 'partial';
+      setStageChipState('chip-stage-3', 'partial', `Partial: ${mlEligibleCount} sources analyzed, ${mlSkippedCount} skipped (< 10 records)`);
+    } else {
+      outcomes.ml = 'completed';
+      setStageChipState('chip-stage-3', 'completed', `ML analysis completed (${mlCreated} outliers)`);
+    }
+
+    // =========================================================================
+    // Stage 4: Contextual Evidence Correlation
+    // Precondition: >= 2 normalized records per source
+    // =========================================================================
+    setStageChipState('chip-stage-4', 'running');
+    setPipelineBannerLog(`[4/7] Discovering multi-dimensional evidence relationships (threshold: >= 2 records)...`, 'running');
+    let relCreated = 0;
+    let relEligibleCount = 0;
+    let relSkippedCount = 0;
+    let correlationFailed = false;
+    let correlationErrorMsg = '';
+
+    for (const src of activeSources) {
+      const recCount = src.normalized_records || 0;
+      if (recCount < 2) {
+        relSkippedCount++;
+        continue;
+      }
+      relEligibleCount++;
+      try {
+        const res = await apiRequest(`/correlation/sources/${src.id}/analyze`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        if (res.status === 'FAILED') {
+          correlationFailed = true;
+          correlationErrorMsg = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : 'Correlation failed';
+          break;
+        } else if (res.status === 'INSUFFICIENT_DATA') {
+          relSkippedCount++;
+        } else {
+          relCreated += (res.relationships_created || 0);
+        }
+      } catch (err) {
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        correlationFailed = true;
+        correlationErrorMsg = err.message;
+        break;
+      }
+    }
+
+    if (correlationFailed) {
+      outcomes.correlate = 'failed';
+      setStageChipState('chip-stage-4', 'failed', `Correlation failed: ${correlationErrorMsg}`);
+      ['chip-stage-5','chip-stage-6','chip-stage-7'].forEach(id => {
+        setStageChipState(id, 'blocked', 'Blocked: Correlation failed');
+      });
+      setPipelineState('Blocked', 'danger');
+      setPipelineBannerLog(`Pipeline halted at Stage 4: Correlation failed (${correlationErrorMsg}).`, 'error');
+      showAlert(`Pipeline halted: Correlation failed (${correlationErrorMsg}).`, 'danger');
+      return;
+    }
+
+    if (relEligibleCount === 0) {
+      outcomes.correlate = 'skipped';
+      setStageChipState('chip-stage-4', 'skipped', 'Skipped: All sources have < 2 normalized records');
+    } else if (relSkippedCount > 0) {
+      outcomes.correlate = 'partial';
+      setStageChipState('chip-stage-4', 'partial', `Partial: ${relEligibleCount} sources correlated, ${relSkippedCount} skipped (< 2 records)`);
+    } else {
+      outcomes.correlate = 'completed';
+      setStageChipState('chip-stage-4', 'completed', `Formed ${relCreated} relationships`);
+    }
+
+    // =========================================================================
+    // Stage 5: Cluster Activity Threads
+    // Precondition: Evidence exists; uses correlation graph and findings
+    // =========================================================================
+    setStageChipState('chip-stage-5', 'running');
+    setPipelineBannerLog(`[5/7] Synthesizing graph-clustered activity threads...`, 'running');
+    let actCreated = 0;
+    let activityFailed = false;
+    let activityErrorMsg = '';
+
+    for (const src of activeSources) {
+      try {
+        const res = await apiRequest(`/activities/sources/${src.id}/form`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        if (res.status === 'FAILED') {
+          activityFailed = true;
+          activityErrorMsg = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : 'Activity clustering failed';
+          break;
+        } else if (res.status === 'INSUFFICIENT_DATA') {
+          // No evidence or no clusterable data
+        } else {
+          actCreated += (res.activities_created || 0);
+        }
+      } catch (err) {
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        activityFailed = true;
+        activityErrorMsg = err.message;
+        break;
+      }
+    }
+
+    if (activityFailed) {
+      outcomes.activities = 'failed';
+      setStageChipState('chip-stage-5', 'failed', `Activity clustering failed: ${activityErrorMsg}`);
+      ['chip-stage-6','chip-stage-7'].forEach(id => {
+        setStageChipState(id, 'blocked', 'Blocked: Activity clustering failed');
+      });
+      setPipelineState('Blocked', 'danger');
+      setPipelineBannerLog(`Pipeline halted at Stage 5: Activity formation failed (${activityErrorMsg}).`, 'error');
+      showAlert(`Pipeline halted: Activity formation failed (${activityErrorMsg}).`, 'danger');
+      return;
+    }
+
+    outcomes.activities = 'completed';
+    setStageChipState('chip-stage-5', 'completed', `${actCreated} activity clusters formed`);
+
+    // =========================================================================
+    // Stage 6: Operational Baseline Evidence Prioritization (Investigation-scoped)
+    // Precondition: Evidence records exist in investigation
+    // =========================================================================
+    setStageChipState('chip-stage-6', 'running');
+    setPipelineBannerLog(`[6/7] Prioritizing evidence artifacts (Baseline Dual-Level Triage)...`, 'running');
+    let baseResultsCount = 0;
+
+    try {
+      const baseRes = await apiRequest(`/prioritization/investigations/${runInvestigationId}/baseline`, { method: 'POST' });
+      if (state.activeInvestigationId !== runInvestigationId) return;
+      if (baseRes.status === 'INSUFFICIENT_DATA') {
+        outcomes.prioritize_baseline = 'skipped';
+        setStageChipState('chip-stage-6', 'skipped', 'Skipped: No evidence records to prioritize');
+      } else {
+        outcomes.prioritize_baseline = 'completed';
+        baseResultsCount = baseRes.results_created || 0;
+        setStageChipState('chip-stage-6', 'completed', `Scored ${baseResultsCount} artifacts`);
+      }
+    } catch (err) {
+      if (state.activeInvestigationId !== runInvestigationId) return;
+      outcomes.prioritize_baseline = 'failed';
+      setStageChipState('chip-stage-6', 'failed', `Baseline prioritization failed: ${err.message}`);
+      setStageChipState('chip-stage-7', 'blocked', 'Blocked: Prioritization error');
+      setPipelineState('Blocked', 'danger');
+      setPipelineBannerLog(`Pipeline halted at Stage 6: Baseline prioritization failed (${err.message}).`, 'error');
+      showAlert(`Pipeline halted: Prioritization failed (${err.message}).`, 'danger');
+      return;
+    }
+
+    // =========================================================================
+    // Stage 7: Contextual Activity Prioritization (Investigation-scoped)
+    // Precondition: Activity clusters must exist in investigation
+    // =========================================================================
+    setStageChipState('chip-stage-7', 'running');
+    setPipelineBannerLog(`[7/7] Prioritizing activity clusters (Contextual Dual-Level Triage)...`, 'running');
+    let ctxResultsCount = 0;
+
+    try {
+      const ctxRes = await apiRequest(`/prioritization/investigations/${runInvestigationId}/contextual`, { method: 'POST' });
+      if (state.activeInvestigationId !== runInvestigationId) return;
+      if (ctxRes.status === 'INSUFFICIENT_DATA') {
+        outcomes.prioritize_contextual = 'skipped';
+        setStageChipState('chip-stage-7', 'skipped', 'Skipped: No activity clusters found to prioritize');
+      } else {
+        outcomes.prioritize_contextual = 'completed';
+        ctxResultsCount = ctxRes.results_created || 0;
+        setStageChipState('chip-stage-7', 'completed', `Scored ${ctxResultsCount} activities`);
+      }
+    } catch (err) {
+      if (state.activeInvestigationId !== runInvestigationId) return;
+      outcomes.prioritize_contextual = 'failed';
+      setStageChipState('chip-stage-7', 'failed', `Contextual prioritization failed: ${err.message}`);
+      setPipelineState('Error', 'danger');
+      setPipelineBannerLog(`Contextual prioritization failed (${err.message}).`, 'error');
+      showAlert(`Contextual prioritization failed: ${err.message}`, 'danger');
+      return;
+    }
+
+    // =========================================================================
+    // Truthful Overall Status Determination
+    // =========================================================================
+    const values = Object.values(outcomes);
+    const hasSkipped = values.some(v => v === 'skipped' || v === 'partial');
+    const hasFailed = values.some(v => v === 'failed');
+
+    let overallState = 'Completed';
+    let badgeClass = 'success';
+    if (hasFailed) {
+      overallState = 'Failed';
+      badgeClass = 'danger';
+    } else if (hasSkipped) {
+      overallState = 'Completed (with skipped stages)';
+      badgeClass = 'warning';
+    }
+
+    setPipelineState(overallState, badgeClass);
+
+    let summaryMsg = `Pipeline execution finished (${overallState}): ${totalNormalized} records normalized, ${totalFindings} rule/IOC findings`;
+    if (outcomes.ml === 'skipped') summaryMsg += ', ML skipped (<10 records)';
+    else summaryMsg += `, ${mlCreated} ML anomalies`;
+    if (outcomes.correlate === 'skipped') summaryMsg += ', correlation skipped (<2 records)';
+    else summaryMsg += `, ${relCreated} links`;
+    summaryMsg += `, ${actCreated} activities`;
+    summaryMsg += `, ${baseResultsCount} artifact scores`;
+    if (outcomes.prioritize_contextual === 'skipped') summaryMsg += ', activity triage skipped (no clusters)';
+    else summaryMsg += `, ${ctxResultsCount} activity scores`;
+    summaryMsg += '.';
+
+    setPipelineBannerLog(summaryMsg, hasSkipped ? 'running' : 'success');
+    showAlert(
+      hasSkipped
+        ? 'Investigation analysis finished: Core detection complete. Some stages skipped due to documented record thresholds.'
+        : 'Investigation analysis completed successfully with all 7 stages.',
+      hasSkipped ? 'warning' : 'success',
+      8000
+    );
+
+    // Refresh summary metrics and active destination view
+    await loadActiveInvestigationSummary();
+    await refreshActiveDestinationView();
+  } catch (err) {
+    if (state.activeInvestigationId !== runInvestigationId) return;
+    console.error('Pipeline Coordinator Failure:', err);
+    setPipelineState('Error', 'danger');
+    setPipelineBannerLog(`Pipeline execution halted due to unexpected error: ${err.message}`, 'error');
+    showAlert(`Pipeline stopped: ${err.message}`, 'danger', 10000);
+
+    // Mark running chip as failed
+    PIPELINE_STAGES.forEach(s => {
+      const chip = document.getElementById(s.chipId);
+      if (chip && chip.classList.contains('chip-running')) {
+        setStageChipState(s.chipId, 'failed', `Error: ${err.message}`);
+      }
+    });
+
+    try {
+      await loadActiveInvestigationSummary();
+      await refreshActiveDestinationView();
+    } catch {}
+  } finally {
+    if (state.activeInvestigationId === runInvestigationId) {
+      state.isPipelineRunning = false;
+      togglePipelineControls(true);
+      updateWorkflowGuide();
+    }
+  }
+}
+
+// Single Pipeline Stage Runner with Explicit Prerequisite Communication & Truthful Status
+async function runSinglePipelineStage(stageKey) {
+  if (state.isPipelineRunning) return;
+  if (!state.activeInvestigationId) {
+    showAlert('Please select or create an investigation first.', 'warning');
+    return;
+  }
+
+  const runInvestigationId = state.activeInvestigationId;
+  const stage = PIPELINE_STAGES.find(s => s.key === stageKey);
+  if (!stage) return;
+
+  state.isPipelineRunning = true;
+  togglePipelineControls(false);
+  setStageChipState(stage.chipId, 'running');
+  setPipelineState('Running Stage...', 'warning');
+  setPipelineBannerLog(`Executing ${stage.name}...`, 'running');
+
+  try {
+    if (stage.scope === 'source') {
+      const sources = await apiRequest(`/investigations/${runInvestigationId}/sources`);
+      if (state.activeInvestigationId !== runInvestigationId) return;
+
+      if (!sources || sources.length === 0) {
+        setStageChipState(stage.chipId, 'skipped', 'No evidence sources found');
+        setPipelineBannerLog(`${stage.name} skipped: No evidence sources found in this investigation. Import evidence first.`, 'error');
+        showAlert('No evidence sources found for this investigation.', 'warning');
+        setPipelineState('Prerequisite Missing', 'warning');
+        return;
+      }
+
+      if (stageKey === 'normalize') {
+        let total = 0;
+        let anyFailed = false;
+        let errDesc = '';
+        for (const src of sources) {
+          const res = await apiRequest(`/evidence/sources/${src.id}/normalize`, { method: 'POST' });
+          if (state.activeInvestigationId !== runInvestigationId) return;
+          total += (res.normalized_records || 0);
+          if (res.status === 'FAILED') {
+            anyFailed = true;
+            errDesc = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : 'Normalization error';
+          }
+        }
+        if (anyFailed) {
+          setStageChipState(stage.chipId, 'failed', errDesc);
+          setPipelineBannerLog(`Normalization failed: ${errDesc}`, 'error');
+          showAlert(`Normalization failed: ${errDesc}`, 'danger');
+          setPipelineState('Failed', 'danger');
+        } else if (total === 0) {
+          setStageChipState(stage.chipId, 'skipped', '0 records normalized');
+          setPipelineBannerLog('Normalization completed: 0 usable records normalized.', 'normal');
+          showAlert('Normalization completed, but 0 records were produced.', 'warning');
+          setPipelineState('0 Records', 'warning');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Normalized ${total} records`);
+          setPipelineBannerLog(`Normalization complete: ${total} records normalized across ${sources.length} source(s).`, 'success');
+          showAlert(`Normalization complete: ${total} records normalized.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      } else if (stageKey === 'detect') {
+        let total = 0;
+        for (const src of sources) {
+          const res = await apiRequest(`/detection/sources/${src.id}/analyze-rules`, { method: 'POST' });
+          if (state.activeInvestigationId !== runInvestigationId) return;
+          total += (res.findings_created || 0);
+        }
+        setStageChipState(stage.chipId, 'completed', `Created ${total} findings`);
+        setPipelineBannerLog(`Deterministic detection complete: ${total} findings generated.`, 'success');
+        showAlert(`Detections complete: ${total} findings generated.`, 'success');
+        setPipelineState('Ready', 'success');
+      } else if (stageKey === 'ml') {
+        let created = 0;
+        let eligible = 0;
+        let skipped = 0;
+        for (const src of sources) {
+          if ((src.normalized_records || 0) < 10) {
+            skipped++;
+            continue;
+          }
+          eligible++;
+          const res = await apiRequest(`/ml/sources/${src.id}/analyze`, { method: 'POST' });
+          if (state.activeInvestigationId !== runInvestigationId) return;
+          if (res.status === 'INSUFFICIENT_DATA') skipped++;
+          else created += (res.findings_created || 0);
+        }
+        if (eligible === 0) {
+          setStageChipState(stage.chipId, 'skipped', 'Documented prerequisite not met: All sources have < 10 records');
+          setPipelineBannerLog(`ML Anomaly analysis skipped: Documented prerequisite not met — requires >= 10 normalized records per source.`, 'normal');
+          showAlert(`ML Anomaly analysis requires >= 10 records per source. None eligible.`, 'warning');
+          setPipelineState('Prerequisite Missing', 'warning');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Flagged ${created} outliers`);
+          setPipelineBannerLog(`ML Anomaly analysis complete: ${created} outliers flagged across ${eligible} eligible source(s).`, 'success');
+          showAlert(`ML Anomaly analysis complete: ${created} outliers flagged.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      } else if (stageKey === 'correlate') {
+        let created = 0;
+        let eligible = 0;
+        let skipped = 0;
+        let failMsg = '';
+        for (const src of sources) {
+          if ((src.normalized_records || 0) < 2) {
+            skipped++;
+            continue;
+          }
+          eligible++;
+          const res = await apiRequest(`/correlation/sources/${src.id}/analyze`, { method: 'POST' });
+          if (state.activeInvestigationId !== runInvestigationId) return;
+          if (res.status === 'FAILED') {
+            failMsg = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : 'Correlation failed';
+            break;
+          } else if (res.status === 'INSUFFICIENT_DATA') {
+            skipped++;
+          } else {
+            created += (res.relationships_created || 0);
+          }
+        }
+        if (failMsg) {
+          setStageChipState(stage.chipId, 'failed', failMsg);
+          setPipelineBannerLog(`Correlation failed: ${failMsg}`, 'error');
+          showAlert(`Correlation failed: ${failMsg}`, 'danger');
+          setPipelineState('Failed', 'danger');
+        } else if (eligible === 0) {
+          setStageChipState(stage.chipId, 'skipped', 'Documented prerequisite not met: Requires >= 2 records per source');
+          setPipelineBannerLog(`Correlation skipped: Requires >= 2 normalized records per source.`, 'normal');
+          showAlert(`Correlation requires >= 2 records per source. None eligible.`, 'warning');
+          setPipelineState('Prerequisite Missing', 'warning');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Formed ${created} relationships`);
+          setPipelineBannerLog(`Correlation complete: ${created} relationships formed.`, 'success');
+          showAlert(`Evidence correlation complete: ${created} relationships formed.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      } else if (stageKey === 'activities') {
+        let created = 0;
+        let failMsg = '';
+        for (const src of sources) {
+          const res = await apiRequest(`/activities/sources/${src.id}/form`, { method: 'POST' });
+          if (state.activeInvestigationId !== runInvestigationId) return;
+          if (res.status === 'FAILED') {
+            failMsg = (res.errors && res.errors.length > 0) ? res.errors.join('; ') : 'Clustering failed';
+            break;
+          } else if (res.status === 'INSUFFICIENT_DATA') {
+            // Source had no records
+          } else {
+            created += (res.activities_created || 0);
+          }
+        }
+        if (failMsg) {
+          setStageChipState(stage.chipId, 'failed', failMsg);
+          setPipelineBannerLog(`Activity formation failed: ${failMsg}`, 'error');
+          showAlert(`Activity clustering failed: ${failMsg}`, 'danger');
+          setPipelineState('Failed', 'danger');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Formed ${created} activities`);
+          setPipelineBannerLog(`Activity clustering complete: ${created} activity threads synthesized.`, 'success');
+          showAlert(`Activity clustering complete: ${created} activities formed.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      }
+    } else {
+      // Investigation-scoped
+      if (stageKey === 'prioritize-baseline') {
+        const res = await apiRequest(`/prioritization/investigations/${runInvestigationId}/baseline`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        if (res.status === 'INSUFFICIENT_DATA') {
+          setStageChipState(stage.chipId, 'skipped', 'Prerequisite not met: No evidence records to prioritize');
+          setPipelineBannerLog('Evidence Prioritization skipped: No evidence records exist in this investigation.', 'normal');
+          showAlert('No evidence records exist in this investigation to prioritize.', 'warning');
+          setPipelineState('Prerequisite Missing', 'warning');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Scored ${res.results_created} artifacts`);
+          setPipelineBannerLog(`Evidence Prioritization complete: ${res.results_created} artifact scores computed.`, 'success');
+          showAlert(`Evidence Prioritization complete: ${res.results_created} scores computed.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      } else if (stageKey === 'prioritize-contextual') {
+        const res = await apiRequest(`/prioritization/investigations/${runInvestigationId}/contextual`, { method: 'POST' });
+        if (state.activeInvestigationId !== runInvestigationId) return;
+        if (res.status === 'INSUFFICIENT_DATA') {
+          setStageChipState(stage.chipId, 'skipped', 'Prerequisite not met: No activity clusters exist to prioritize');
+          setPipelineBannerLog('Activity Prioritization skipped: Prerequisite not met — 0 activity clusters exist in this investigation. Run "Cluster Activities" first.', 'normal');
+          showAlert('Activity Prioritization requires formed activity clusters. Run Stage 5 first.', 'warning');
+          setPipelineState('Prerequisite Missing', 'warning');
+        } else {
+          setStageChipState(stage.chipId, 'completed', `Scored ${res.results_created} activities`);
+          setPipelineBannerLog(`Activity Prioritization complete: ${res.results_created} activity scores computed.`, 'success');
+          showAlert(`Activity Prioritization complete: ${res.results_created} scores computed.`, 'success');
+          setPipelineState('Ready', 'success');
+        }
+      }
+    }
+
+    await loadActiveInvestigationSummary();
+    await refreshActiveDestinationView();
+  } catch (err) {
+    if (state.activeInvestigationId !== runInvestigationId) return;
+    console.error(`Error executing ${stage.name}:`, err);
+    setStageChipState(stage.chipId, 'failed', err.message);
+    setPipelineState('Error', 'danger');
+    setPipelineBannerLog(`${stage.name} failed: ${err.message}`, 'error');
+    showAlert(`${stage.name} failed: ${err.message}`, 'danger');
+  } finally {
+    if (state.activeInvestigationId === runInvestigationId) {
+      state.isPipelineRunning = false;
+      togglePipelineControls(true);
+    }
+  }
+}
+
+// Single-source Normalize trigger (Evidence table action)
+window.triggerNormalizeSource = async function(sourceId) {
+  if (state.isPipelineRunning) return;
+  const currentInvId = state.activeInvestigationId;
+
+  try {
+    setPipelineState('Normalizing...', 'warning');
+    showAlert(`Normalizing evidence source ${sourceId.substring(0, 8)}...`, 'warning');
+    const res = await apiRequest(`/evidence/sources/${sourceId}/normalize`, { method: 'POST' });
+    if (state.activeInvestigationId !== currentInvId) return;
+    showAlert(`Normalization completed: ${res.normalized_records} records normalized.`, 'success');
+    await loadActiveInvestigationSummary();
+    await loadSources();
+    setPipelineState('Ready', 'success');
+  } catch (err) {
+    if (state.activeInvestigationId !== currentInvId) return;
+    showAlert(`Normalization failed: ${err.message}`, 'danger');
+    setPipelineState('Error', 'danger');
+  }
+};
+
+function setupPipelineCoordinator() {
+  const runFullBtn = document.getElementById('btn-run-full-analysis');
+  if (runFullBtn) {
+    runFullBtn.addEventListener('click', runFullAnalysisPipeline);
+  }
+
+  const runSingleBtn = document.getElementById('btn-run-single-stage');
+  if (runSingleBtn) {
+    runSingleBtn.addEventListener('click', () => {
+      const selectStage = document.getElementById('select-pipeline-stage');
+      if (selectStage) {
+        runSinglePipelineStage(selectStage.value);
+      }
+    });
+  }
+}
+
+// ==========================================================================
+// Destination View Refresh & Tab Management
+// ==========================================================================
+
+async function refreshActiveDestinationView() {
+  if (!state.activeInvestigationId) return;
+
+  if (state.activeTab === 'tab-overview') {
+    return;
+  } else if (state.activeTab === 'tab-evidence') {
+    await loadSources();
+    await loadEvidenceRecords();
+  } else if (state.activeTab === 'tab-analysis') {
+    await Promise.all([loadActivities(), loadFindings()]);
+    const adv = document.getElementById('advanced-analysis-details');
+    if (adv && adv.open) {
+      await Promise.all([loadCorrelations(), loadAllPrioritizations()]);
+    }
+  } else if (state.activeTab === 'tab-report' || state.activeTab === 'tab-findings') {
+    if (!state.summary && state.activeInvestigationId) {
+      await loadActiveInvestigationSummary();
+    } else {
+      updateReportPreview(state.summary);
+    }
+  }
 }
 
 function showExampleEvidenceBanner() {
@@ -625,116 +1780,195 @@ function hideExampleEvidenceBanner() {
   if (banner) banner.style.display = 'none';
 }
 
+// Download PDF Investigation Report Helper
+async function downloadInvestigationReport(btnEl, spinnerEl) {
+  if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+
+  const findingsBtn = document.getElementById('btn-findings-download-report');
+  const findingsSpinner = document.getElementById('btn-findings-download-report-spinner');
+
+  if (findingsBtn) findingsBtn.style.display = 'none';
+  if (findingsSpinner) findingsSpinner.style.display = 'inline';
+
+  try {
+    const url = `${API_BASE}/investigations/${currentInvId}/report`;
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try { const j = await res.json(); detail = j.detail || j.message || detail; } catch {}
+      throw new Error(detail);
+    }
+
+    let filename = 'ForensiQ_Report.pdf';
+    const cd = res.headers.get('Content-Disposition');
+    if (cd) {
+      const m = cd.match(/filename="?([^";\n]+)"?/i);
+      if (m) filename = m[1].trim();
+    } else if (state.summary?.investigation?.case_number) {
+      filename = `ForensiQ_${state.summary.investigation.case_number}_Report.pdf`;
+    }
+
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    showAlert('Investigation report generated and downloaded successfully.', 'success', 4000);
+  } catch (err) {
+    showAlert(`Report generation failed: ${err.message}`, 'danger');
+  } finally {
+    if (findingsSpinner) findingsSpinner.style.display = 'none';
+    if (findingsBtn) findingsBtn.style.display = 'inline-block';
+  }
+}
+
+// ==========================================================================
 // Event Listeners Setup
+// ==========================================================================
+
 function setupEventListeners() {
-  // Login Form
-  document.getElementById('login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    const errAlert = document.getElementById('auth-error-alert');
-    errAlert.style.display = 'none';
+  // Download Investigation Report (Findings & Report tab button)
+  const reportBtnFindings = document.getElementById('btn-findings-download-report');
+  const spinnerFindings = document.getElementById('btn-findings-download-report-spinner');
+  if (reportBtnFindings) {
+    reportBtnFindings.addEventListener('click', () => downloadInvestigationReport(reportBtnFindings, spinnerFindings));
+  }
 
-    try {
-      const res = await apiRequest('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      state.token = res.access_token;
-      state.user = res.user;
-      localStorage.setItem('forensiq_token', res.access_token);
-      // Store credentials for silent token refresh on expiry
-      localStorage.setItem('forensiq_email', email);
-      localStorage.setItem('forensiq_password', password);
-      showDashboardView();
-      await loadInvestigations();
-    } catch (err) {
-      errAlert.textContent = err.message;
-      errAlert.style.display = 'block';
-    }
-  });
-
-  // Logout Button
-  document.getElementById('btn-logout').addEventListener('click', () => {
-    handleAuthFailure();
-  });
-
-  // Download Investigation Report
-  document.getElementById('btn-download-report').addEventListener('click', async () => {
-    if (!state.activeInvestigationId) return;
-
-    const btn     = document.getElementById('btn-download-report');
-    const spinner = document.getElementById('btn-download-report-spinner');
-    btn.style.display     = 'none';
-    spinner.style.display = 'inline';
-
-    try {
-      const url = `${API_BASE}/investigations/${state.activeInvestigationId}/report`;
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${state.token}` },
-      });
-
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try { const j = await res.json(); detail = j.detail || j.message || detail; } catch {}
-        throw new Error(detail);
-      }
-
-      // Determine filename from Content-Disposition or fall back to case number
-      let filename = 'ForensiQ_Report.pdf';
-      const cd = res.headers.get('Content-Disposition');
-      if (cd) {
-        const m = cd.match(/filename="?([^";\n]+)"?/i);
-        if (m) filename = m[1].trim();
-      } else if (state.summary?.investigation?.case_number) {
-        filename = `ForensiQ_${state.summary.investigation.case_number}_Report.pdf`;
-      }
-
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href     = blobUrl;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-    } catch (err) {
-      showAlert(`Report generation failed: ${err.message}`, 'danger');
-    } finally {
-      spinner.style.display = 'none';
-      btn.style.display     = 'inline-block';
-    }
-  });
-
-  // Case Selection Change
+  // Case Selection Change with Concurrency and Stale Guard
   document.getElementById('investigation-select').addEventListener('change', async (e) => {
-    state.activeInvestigationId = e.target.value;
+    if (state.isPipelineRunning) {
+      showAlert('Pipeline is currently executing. Case switching is locked until the pipeline halts.', 'warning');
+      e.target.value = state.activeInvestigationId;
+      return;
+    }
+
+    // Close any open modals to prevent displaying stale forensic records
+    const detailModal = document.getElementById('modal-detail');
+    if (detailModal && detailModal.style.display !== 'none') {
+      window.closeModal(detailModal);
+    }
+    const importModal = document.getElementById('modal-import-evidence');
+    if (importModal && importModal.style.display !== 'none') {
+      window.closeModal(importModal);
+    }
+
+    const newInvId = e.target.value;
+    if (!newInvId) {
+      state.activeInvestigationId = null;
+      localStorage.removeItem('forensiq_active_inv_id');
+      renderEmptyInvestigation();
+      updateRouteHash('', 'overview');
+      return;
+    }
+
+    state.investigationVersion++;
+    state.activeInvestigationId = newInvId;
     localStorage.setItem('forensiq_active_inv_id', state.activeInvestigationId);
+
+    resetCaseScopedState();
+    updateRouteHash(newInvId);
+
     await loadActiveInvestigationSummary();
+    await refreshActiveDestinationView();
   });
 
-  // Tab Switching
+  // Primary Navigation Tab Switching (4 Destinations) - Integrated with URL Route
   document.querySelectorAll('.nav-tab').forEach(tab => {
-    tab.addEventListener('click', async () => {
-      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-
-      tab.classList.add('active');
+    tab.addEventListener('click', () => {
       const targetPaneId = tab.getAttribute('data-tab');
-      document.getElementById(targetPaneId).classList.add('active');
-
-      // Trigger lazy tab loads
-      if (targetPaneId === 'tab-prioritization') await loadAllPrioritizations();
-      if (targetPaneId === 'tab-findings') await loadFindings();
-      if (targetPaneId === 'tab-ml') await loadMLAnomalies();
-      if (targetPaneId === 'tab-correlations') await loadCorrelations();
-      if (targetPaneId === 'tab-activities') await loadActivities();
-      if (targetPaneId === 'tab-sources') await loadSources();
+      const tabShort = PANE_TO_TAB[targetPaneId] || 'overview';
+      navigateToTab(tabShort);
     });
   });
 
-  // Filter Event Listeners
+  // Evidence Master-Detail Inspector Close Button
+  const btnCloseInspector = document.getElementById('btn-close-inspector');
+  if (btnCloseInspector) {
+    btnCloseInspector.addEventListener('click', () => {
+      selectEvidenceRecord(null);
+    });
+  }
+
+  // Guided Investigation Workflow Steps click interactions
+  const wfStep1 = document.getElementById('wf-step-1');
+  if (wfStep1) {
+    wfStep1.addEventListener('click', openNewCaseModal);
+  }
+
+  const wfStep2 = document.getElementById('wf-step-2');
+  if (wfStep2) {
+    wfStep2.addEventListener('click', openImportEvidenceModal);
+  }
+
+  const wfStep3 = document.getElementById('wf-step-3');
+  if (wfStep3) {
+    wfStep3.addEventListener('click', () => {
+      if (!state.isPipelineRunning) runFullAnalysisPipeline();
+    });
+  }
+
+  const wfStep4 = document.getElementById('wf-step-4');
+  if (wfStep4) {
+    wfStep4.addEventListener('click', () => {
+      const analysisTab = document.getElementById('nav-tab-analysis');
+      if (analysisTab) analysisTab.click();
+    });
+  }
+
+  const wfStep5 = document.getElementById('wf-step-5');
+  if (wfStep5) {
+    wfStep5.addEventListener('click', () => {
+      const reportTab = document.getElementById('nav-tab-report');
+      if (reportTab) {
+        reportTab.click();
+      } else {
+        const findingsBtn = document.getElementById('btn-findings-download-report');
+        const findingsSpinner = document.getElementById('btn-findings-download-report-spinner');
+        if (!state.isPipelineRunning) downloadInvestigationReport(findingsBtn, findingsSpinner);
+      }
+    });
+  }
+
+  const advDetails = document.getElementById('advanced-analysis-details');
+  if (advDetails) {
+    advDetails.addEventListener('toggle', () => {
+      if (advDetails.open && state.activeInvestigationId) {
+        loadCorrelations();
+        loadAllPrioritizations();
+      }
+    });
+  }
+
+  // Analysis Subnavigation Pills Switching
+  document.querySelectorAll('.subnav-pill').forEach(pill => {
+    pill.addEventListener('click', async () => {
+      document.querySelectorAll('.subnav-pill').forEach(p => {
+        p.classList.remove('active');
+        p.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.subtab-pane').forEach(sp => sp.classList.remove('active'));
+
+      pill.classList.add('active');
+      pill.setAttribute('aria-selected', 'true');
+      const targetSubpaneId = pill.getAttribute('data-subtab');
+      state.activeSubtab = targetSubpaneId;
+      const targetSubpane = document.getElementById(targetSubpaneId);
+      if (targetSubpane) targetSubpane.classList.add('active');
+
+      if (targetSubpaneId === 'subpane-activities') await loadActivities();
+      else if (targetSubpaneId === 'subpane-correlations') await loadCorrelations();
+      else if (targetSubpaneId === 'subpane-ml') await loadMLAnomalies();
+      else if (targetSubpaneId === 'subpane-prioritization') await loadAllPrioritizations();
+    });
+  });
+
+  // Filters
   const filterPrioTier = document.getElementById('filter-prio-tier');
   if (filterPrioTier) filterPrioTier.addEventListener('change', loadAllPrioritizations);
 
@@ -747,32 +1981,93 @@ function setupEventListeners() {
   const filterRelType = document.getElementById('filter-rel-type');
   if (filterRelType) filterRelType.addEventListener('change', loadCorrelations);
 
-  // Modal Handling Helpers
-  let lastFocusedElement = null;
+  // Evidence Explorer Filters & Pagination
+  const filterEvidenceSource = document.getElementById('filter-evidence-source');
+  if (filterEvidenceSource) {
+    filterEvidenceSource.addEventListener('change', (e) => {
+      state.evidencePagination.source_id = e.target.value;
+      state.evidencePagination.offset = 0;
+      loadEvidenceRecords();
+    });
+  }
 
-  window.openModal = function(modalId) {
-    lastFocusedElement = document.activeElement;
-    const modal = document.getElementById(modalId);
-    if (modal) {
-      modal.style.display = 'flex';
-      modal.setAttribute('aria-hidden', 'false');
-      const focusable = modal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-      if (focusable) focusable.focus();
-    }
-  };
+  const filterEvidenceEventType = document.getElementById('filter-evidence-event-type');
+  if (filterEvidenceEventType) {
+    filterEvidenceEventType.addEventListener('change', (e) => {
+      state.evidencePagination.event_type = e.target.value;
+      state.evidencePagination.offset = 0;
+      loadEvidenceRecords();
+    });
+  }
 
-  window.closeModal = function(modal) {
-    if (modal) {
-      modal.style.display = 'none';
-      modal.setAttribute('aria-hidden', 'true');
-      if (lastFocusedElement) {
-        lastFocusedElement.focus();
-        lastFocusedElement = null;
+  const btnFilterEvidence = document.getElementById('btn-filter-evidence');
+  if (btnFilterEvidence) {
+    btnFilterEvidence.addEventListener('click', () => {
+      const srcEl = document.getElementById('filter-evidence-source');
+      const typeEl = document.getElementById('filter-evidence-event-type');
+      const userEl = document.getElementById('filter-evidence-user');
+      const devEl = document.getElementById('filter-evidence-device');
+
+      state.evidencePagination.source_id = srcEl ? srcEl.value : '';
+      state.evidencePagination.event_type = typeEl ? typeEl.value : '';
+      state.evidencePagination.user_id = userEl ? userEl.value.trim() : '';
+      state.evidencePagination.device_id = devEl ? devEl.value.trim() : '';
+      state.evidencePagination.offset = 0;
+      loadEvidenceRecords();
+    });
+  }
+
+  const btnResetEvidence = document.getElementById('btn-reset-evidence-filters');
+  if (btnResetEvidence) {
+    btnResetEvidence.addEventListener('click', () => {
+      const srcEl = document.getElementById('filter-evidence-source');
+      if (srcEl) srcEl.value = '';
+      const typeEl = document.getElementById('filter-evidence-event-type');
+      if (typeEl) typeEl.value = '';
+      const userEl = document.getElementById('filter-evidence-user');
+      if (userEl) userEl.value = '';
+      const devEl = document.getElementById('filter-evidence-device');
+      if (devEl) devEl.value = '';
+
+      state.evidencePagination.source_id = '';
+      state.evidencePagination.event_type = '';
+      state.evidencePagination.user_id = '';
+      state.evidencePagination.device_id = '';
+      state.evidencePagination.offset = 0;
+      loadEvidenceRecords();
+    });
+  }
+
+  const evidencePageSize = document.getElementById('evidence-page-size');
+  if (evidencePageSize) {
+    evidencePageSize.addEventListener('change', (e) => {
+      state.evidencePagination.limit = parseInt(e.target.value, 10) || 25;
+      state.evidencePagination.offset = 0;
+      loadEvidenceRecords();
+    });
+  }
+
+  const btnEvidencePrev = document.getElementById('btn-evidence-prev');
+  if (btnEvidencePrev) {
+    btnEvidencePrev.addEventListener('click', () => {
+      if (state.evidencePagination.offset > 0) {
+        state.evidencePagination.offset = Math.max(0, state.evidencePagination.offset - state.evidencePagination.limit);
+        loadEvidenceRecords();
       }
-    }
-  };
+    });
+  }
 
-  // Modal Closures
+  const btnEvidenceNext = document.getElementById('btn-evidence-next');
+  if (btnEvidenceNext) {
+    btnEvidenceNext.addEventListener('click', () => {
+      if (state.evidencePagination.offset + state.evidencePagination.limit < state.evidencePagination.total) {
+        state.evidencePagination.offset += state.evidencePagination.limit;
+        loadEvidenceRecords();
+      }
+    });
+  }
+
+  // Modal Close & Backdrop Interactions
   document.querySelectorAll('[data-close]').forEach(btn => {
     btn.addEventListener('click', () => {
       const modalId = btn.getAttribute('data-close');
@@ -780,21 +2075,115 @@ function setupEventListeners() {
     });
   });
 
-  // Escape key closes modals
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        window.closeModal(overlay);
+      }
+    });
+  });
+
   document.addEventListener('keydown', (e) => {
+    // Check for open modals
+    const openModals = Array.from(document.querySelectorAll('.modal-overlay, .modal-backdrop')).filter(m => m.style.display !== 'none' && m.getAttribute('aria-hidden') !== 'true');
+
     if (e.key === 'Escape') {
-      document.querySelectorAll('.modal-overlay, .modal-backdrop').forEach(m => {
-        if (m.style.display !== 'none') window.closeModal(m);
-      });
+      if (openModals.length > 0) {
+        e.preventDefault();
+        openModals.forEach(m => window.closeModal(m));
+        return;
+      }
+      // If no open modal, Escape deselects the evidence inspector
+      if (state.selectedEvidenceId) {
+        e.preventDefault();
+        selectEvidenceRecord(null);
+        return;
+      }
+      return;
+    }
+
+    if (e.key === 'Tab' && openModals.length > 0) {
+      const activeModal = openModals[openModals.length - 1];
+      const focusable = getFocusableElements(activeModal);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+
+      const firstEl = focusable[0];
+      const lastEl = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstEl || !activeModal.contains(document.activeElement)) {
+          e.preventDefault();
+          lastEl.focus();
+        }
+      } else {
+        if (document.activeElement === lastEl || !activeModal.contains(document.activeElement)) {
+          e.preventDefault();
+          firstEl.focus();
+        }
+      }
+      return;
+    }
+
+    // If modal is open, do not execute global navigation or inspector shortcuts
+    if (openModals.length > 0) return;
+
+    // Safety checks: do not intercept if typing in editable controls or modifier keys held
+    const activeEl = document.activeElement;
+    const tagName = activeEl ? activeEl.tagName.toUpperCase() : '';
+    const isEditable = tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || (activeEl && activeEl.isContentEditable);
+    if (isEditable) return;
+
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+
+    // Phase 3 Keyboard Navigation:
+    // Tab shortcuts 1, 2, 3, 4
+    if (e.key === '1') {
+      e.preventDefault();
+      navigateToTab('overview');
+      return;
+    }
+    if (e.key === '2') {
+      e.preventDefault();
+      navigateToTab('evidence');
+      return;
+    }
+    if (e.key === '3') {
+      e.preventDefault();
+      navigateToTab('analysis');
+      return;
+    }
+    if (e.key === '4') {
+      e.preventDefault();
+      navigateToTab('report');
+      return;
+    }
+
+    // Evidence Master-Detail Row Navigation: J (next), K (previous)
+    if (e.key === 'j' || e.key === 'J') {
+      if (state.activeTab === 'tab-evidence') {
+        e.preventDefault();
+        selectNextEvidenceRow();
+        return;
+      }
+    }
+    if (e.key === 'k' || e.key === 'K') {
+      if (state.activeTab === 'tab-evidence') {
+        e.preventDefault();
+        selectPreviousEvidenceRow();
+        return;
+      }
     }
   });
 
   // New Case Modal Trigger
-  document.getElementById('btn-new-case').addEventListener('click', () => {
-    window.openModal('modal-new-case');
-  });
+  const newCaseBtn = document.getElementById('btn-new-case');
+  if (newCaseBtn) {
+    newCaseBtn.addEventListener('click', openNewCaseModal);
+  }
 
-  // Use Example Case — fills form fields, does NOT submit
   document.getElementById('btn-use-example-case').addEventListener('click', () => {
     document.getElementById('new-case-title').value = 'Suspicious Workstation Compromise';
     document.getElementById('new-case-number').value = 'CASE-DEMO-001';
@@ -804,9 +2193,6 @@ function setupEventListeners() {
     document.getElementById('new-case-error').style.display = 'none';
   });
 
-
-
-  // New Case Form Submit
   document.getElementById('form-new-case').addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('new-case-title').value.trim();
@@ -815,42 +2201,38 @@ function setupEventListeners() {
     const errAlert = document.getElementById('new-case-error');
     errAlert.style.display = 'none';
 
-    // Detect if this is the example case so we can offer example evidence after creation
-    const isExampleCase = (case_number === 'CASE-DEMO-001' ||
-      title === 'Suspicious Workstation Compromise');
+    const isExampleCase = (case_number === 'CASE-DEMO-001' || title === 'Suspicious Workstation Compromise');
 
     try {
       const newInv = await apiRequest('/investigations', {
         method: 'POST',
         body: JSON.stringify({ title, case_number, description, status: 'OPEN' }),
       });
-      if (window.closeModal) window.closeModal(document.getElementById('modal-new-case'));
-      else document.getElementById('modal-new-case').style.display = 'none';
+      window.closeModal(document.getElementById('modal-new-case'));
       showAlert(`Investigation '${newInv.title}' created successfully.`, 'success');
       state.activeInvestigationId = newInv.id;
       await loadInvestigations();
-
-      // Show example evidence banner if case was created from example template
-      if (isExampleCase) {
-        showExampleEvidenceBanner();
-      }
+      if (isExampleCase) showExampleEvidenceBanner();
     } catch (err) {
       errAlert.textContent = err.message;
       errAlert.style.display = 'block';
     }
   });
 
-  // Example Evidence Banner — Import button
+  // Example Evidence Banner
   document.getElementById('btn-import-example-evidence').addEventListener('click', async () => {
+    if (state.isPipelineRunning) {
+      showAlert('Pipeline is executing. Please wait for completion before importing evidence.', 'warning');
+      return;
+    }
     if (!state.activeInvestigationId) {
       showAlert('No active investigation. Please create a case first.', 'warning');
       return;
     }
     try {
-      setPipelineState('Importing Example Evidence...', 'warning');
+      setPipelineState('Importing...', 'warning');
       showAlert('Fetching and importing example evidence CSV...', 'warning');
 
-      // Fetch the example CSV from the backend static examples endpoint
       const csvUrl = `${API_BASE}/examples/example_evidence.csv`;
       const csvResp = await fetch(csvUrl);
       if (!csvResp.ok) throw new Error(`Could not fetch example CSV (${csvResp.status})`);
@@ -865,9 +2247,9 @@ function setupEventListeners() {
       const res = await apiRequest('/evidence/import', { method: 'POST', body: formData });
       showAlert(
         `Example evidence imported: ${res.total_records} records (SHA-256: ${res.sha256_hash.substring(0, 12)}...). ` +
-        `Click "Normalize" then run each pipeline stage.`,
+        `Ready for pipeline analysis.`,
         'success',
-        10000
+        8000
       );
       hideExampleEvidenceBanner();
       await loadActiveInvestigationSummary();
@@ -878,26 +2260,23 @@ function setupEventListeners() {
     }
   });
 
-  // Example Evidence Banner — Dismiss button
   document.getElementById('btn-dismiss-example-banner').addEventListener('click', () => {
     hideExampleEvidenceBanner();
   });
 
-  // Update example evidence download link to use correct API base
   const exampleBannerDl = document.getElementById('btn-download-example-evidence');
   if (exampleBannerDl) {
     exampleBannerDl.href = `${API_BASE}/examples/example_evidence.csv`;
   }
 
-  // Import Evidence Modal Trigger
-  document.getElementById('btn-action-import').addEventListener('click', () => {
-    if (window.openModal) window.openModal('modal-import-evidence');
-    else document.getElementById('modal-import-evidence').style.display = 'flex';
-  });
+  // Import Evidence Modal Triggers
+  const headerImportBtn = document.getElementById('btn-action-import');
+  if (headerImportBtn) headerImportBtn.addEventListener('click', openImportEvidenceModal);
 
+  const tabImportBtn = document.getElementById('btn-evidence-tab-import');
+  if (tabImportBtn) tabImportBtn.addEventListener('click', openImportEvidenceModal);
 
-
-  // Import Evidence Form Submit
+  // Import Evidence Form
   document.getElementById('form-import-evidence').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fileInput = document.getElementById('import-file');
@@ -917,17 +2296,14 @@ function setupEventListeners() {
     try {
       document.getElementById('btn-submit-import').disabled = true;
       setPipelineState('Ingesting Evidence...', 'warning');
-      const res = await apiRequest('/evidence/import', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await apiRequest('/evidence/import', { method: 'POST', body: formData });
       succAlert.textContent = `Evidence ingested: ${res.total_records} records (SHA-256: ${res.sha256_hash.substring(0, 12)}...)`;
       succAlert.style.display = 'block';
       setTimeout(() => {
-        if (window.closeModal) window.closeModal(document.getElementById('modal-import-evidence'));
-        else document.getElementById('modal-import-evidence').style.display = 'none';
+        window.closeModal(document.getElementById('modal-import-evidence'));
         document.getElementById('btn-submit-import').disabled = false;
         loadActiveInvestigationSummary();
+        refreshActiveDestinationView();
         setPipelineState('Ready', 'success');
       }, 1500);
     } catch (err) {
@@ -937,158 +2313,52 @@ function setupEventListeners() {
       setPipelineState('Import Error', 'danger');
     }
   });
-
-  // Pipeline Action Triggers
-  setupPipelineActions();
 }
 
-function setupPipelineActions() {
-  // Normalize All
-  document.getElementById('btn-action-normalize').addEventListener('click', async () => {
-    if (!state.summary || state.summary.sources.length === 0) {
-      showAlert('No evidence sources available to normalize.', 'warning');
-      return;
-    }
-    setPipelineState('Normalizing...', 'warning');
-    for (const src of state.summary.sources) {
-      await triggerNormalizeSource(src.id);
-    }
-    setPipelineState('Ready', 'success');
-  });
+// ==========================================================================
+// Lazy Destination Data Loaders with Stale Response Guards
+// ==========================================================================
 
-  // Run Deterministic Detections
-  document.getElementById('btn-action-detect').addEventListener('click', async () => {
-    if (!state.summary || state.summary.sources.length === 0) {
-      showAlert('No evidence sources available.', 'warning');
-      return;
-    }
-    try {
-      setPipelineState('Running Detections...', 'warning');
-      showAlert('Executing deterministic detection rules & IOCs...', 'warning');
-      for (const src of state.summary.sources) {
-        const res = await apiRequest(`/detection/sources/${src.id}/analyze-rules`, { method: 'POST' });
-        showAlert(`Detections complete for ${src.filename}: ${res.findings_created} new findings created.`, 'success');
-      }
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Detection failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
+async function loadSources() {
+  if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.sources;
 
-  // Run ML Anomaly Detection
-  document.getElementById('btn-action-ml').addEventListener('click', async () => {
-    if (!state.summary || state.summary.sources.length === 0) {
-      showAlert('No evidence sources available.', 'warning');
-      return;
-    }
-    try {
-      setPipelineState('Running ML Anomaly...', 'warning');
-      showAlert('Executing unsupervised ML anomaly detection...', 'warning');
-      for (const src of state.summary.sources) {
-        const res = await apiRequest(`/ml/sources/${src.id}/analyze`, { method: 'POST' });
-        showAlert(`ML Anomaly analysis complete: ${res.anomalies_detected} outliers flagged (${res.status}).`, 'success');
-      }
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`ML analysis failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
-
-  // Run Contextual Correlation
-  document.getElementById('btn-action-correlate').addEventListener('click', async () => {
-    if (!state.summary || state.summary.sources.length === 0) {
-      showAlert('No evidence sources available.', 'warning');
-      return;
-    }
-    try {
-      setPipelineState('Correlating Evidence...', 'warning');
-      showAlert('Executing multi-dimensional evidence correlation...', 'warning');
-      for (const src of state.summary.sources) {
-        const res = await apiRequest(`/correlation/sources/${src.id}/analyze`, { method: 'POST' });
-        showAlert(`Correlation complete: ${res.relationships_created} relationships formed.`, 'success');
-      }
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Correlation failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
-
-  // Cluster Activities
-  document.getElementById('btn-action-activities').addEventListener('click', async () => {
-    if (!state.summary || state.summary.sources.length === 0) {
-      showAlert('No evidence sources available.', 'warning');
-      return;
-    }
-    try {
-      setPipelineState('Clustering Activities...', 'warning');
-      showAlert('Clustering contextual evidence threads & activities...', 'warning');
-      for (const src of state.summary.sources) {
-        const res = await apiRequest(`/activities/sources/${src.id}/form`, { method: 'POST' });
-        showAlert(`Activity formation complete: ${res.activities_created} coherent activities synthesized.`, 'success');
-      }
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Activity formation failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
-
-  // Prioritize Evidence
-  document.getElementById('btn-action-prioritize-artifact').addEventListener('click', async () => {
-    if (!state.activeInvestigationId) return;
-    try {
-      setPipelineState('Prioritizing Evidence...', 'warning');
-      showAlert('Running Evidence Prioritization...', 'warning');
-      const res = await apiRequest(`/prioritization/investigations/${state.activeInvestigationId}/baseline`, { method: 'POST' });
-      showAlert(`Evidence Prioritization complete: ${res.results_created} artifact scores computed.`, 'success');
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Prioritization failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
-
-  // Prioritize Activities
-  document.getElementById('btn-action-prioritize-activity').addEventListener('click', async () => {
-    if (!state.activeInvestigationId) return;
-    try {
-      setPipelineState('Prioritizing Activities...', 'warning');
-      showAlert('Running Activity Prioritization...', 'warning');
-      const res = await apiRequest(`/prioritization/investigations/${state.activeInvestigationId}/contextual`, { method: 'POST' });
-      showAlert(`Activity Prioritization complete: ${res.results_created} activity scores computed.`, 'success');
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Prioritization failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
+  try {
+    const sources = await apiRequest(`/investigations/${currentInvId}/sources`);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.sources) return; // Stale guard
+    state.sourcesCache.clear();
+    (sources || []).forEach(s => state.sourcesCache.set(s.id, s));
+    populateEvidenceSourceFilter(sources);
+    renderSourcesTable(sources);
+    updateWorkflowGuide();
+  } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.sources) return;
+    showAlert(`Failed to refresh sources: ${err.message}`, 'danger');
+  }
 }
 
-// Lazy Tab Data Loaders
 async function loadAllPrioritizations() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.prioritization;
   const tbody = document.getElementById('all-prio-tbody');
+  if (!tbody) return;
   const tier = document.getElementById('filter-prio-tier').value;
   const method = document.getElementById('filter-prio-method').value;
 
-  let query = `/prioritization/results?investigation_id=${state.activeInvestigationId}&limit=100`;
+  let query = `/prioritization/results?investigation_id=${currentInvId}&limit=100`;
   if (tier) query += `&priority_tier=${tier}`;
   if (method) query += `&method_type=${method}`;
 
   try {
     const res = await apiRequest(query);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.prioritization) return; // Stale guard
     tbody.innerHTML = '';
     if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No priority results yet. Run "Prioritize Evidence" or "Prioritize Activities" first.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No priority results yet. Run "Run Full Analysis Pipeline" or selective prioritization.</td></tr>';
       return;
     }
     res.items.forEach(r => {
@@ -1107,23 +2377,29 @@ async function loadAllPrioritizations() {
       tbody.appendChild(tr);
     });
   } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.prioritization) return;
     tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading results: ${err.message}</td></tr>`;
   }
 }
 
 async function loadFindings() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.findings;
   const tbody = document.getElementById('findings-tbody');
+  if (!tbody) return;
   const ftype = document.getElementById('filter-finding-type').value;
 
-  let query = `/detection/findings?investigation_id=${state.activeInvestigationId}&limit=100`;
+  let query = `/detection/findings?investigation_id=${currentInvId}&limit=100`;
   if (ftype) query += `&finding_type=${ftype}`;
 
   try {
     const res = await apiRequest(query);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return; // Stale guard
     tbody.innerHTML = '';
     if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No findings yet. Run "Run Detections" to apply rules and IOC matching to normalized evidence.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No findings yet. Run "Run Full Analysis Pipeline" to evaluate rules and IOCs.</td></tr>';
       return;
     }
     res.items.forEach(f => {
@@ -1131,33 +2407,42 @@ async function loadFindings() {
       tr.innerHTML = `
         <td><span class="badge badge-mono">${formatEnum(f.finding_type)}</span></td>
         <td class="font-mono"><strong>${f.severity.toFixed(2)}</strong></td>
-        <td><strong class="font-mono text-sm">${f.rule_id}</strong></td>
-        <td>${f.mitre_tactic ? `<span class="badge badge-mono">${f.mitre_tactic} / ${f.mitre_technique || ''}</span>` : '<span class="text-muted">None</span>'}</td>
-        <td style="max-width: 400px; font-size: 11px;">${escapeHtml(f.description || '')}</td>
+        <td><strong class="font-mono text-sm">${escapeHtml(f.rule_id || '—')}</strong></td>
+        <td>${f.mitre_tactic ? `<span class="badge badge-mono">${escapeHtml(f.mitre_tactic)} / ${escapeHtml(f.mitre_technique || '')}</span>` : '<span class="text-muted">None specified</span>'}</td>
+        <td style="max-width: 360px; font-size: 11px;">${escapeHtml(f.description || '')}</td>
         <td class="text-sm">${new Date(f.created_at).toLocaleString()}</td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="viewFindingProofModal('${escapeHtml(f.id)}')" title="Inspect verified proof, supporting evidence, and correlations">Inspect Proof</button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Error loading findings: ${err.message}</td></tr>`;
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading findings: ${err.message}</td></tr>`;
   }
 }
 
 async function loadMLAnomalies() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.findings;
   const tbody = document.getElementById('ml-anomalies-tbody');
+  if (!tbody) return;
 
   try {
-    const res = await apiRequest(`/detection/findings?investigation_id=${state.activeInvestigationId}&finding_type=ML_ANOMALY&limit=100`);
+    const res = await apiRequest(`/detection/findings?investigation_id=${currentInvId}&finding_type=ML_ANOMALY&limit=100`);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return; // Stale guard
     tbody.innerHTML = '';
     if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No anomalies detected. Run "Run ML Anomaly" — requires at least 10 normalized evidence records.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No anomalies detected. Run ML Anomaly Analysis (requires >= 10 normalized records per source).</td></tr>';
       return;
     }
     res.items.forEach(f => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><span class="badge badge-mono">${f.rule_id}</span></td>
+        <td><span class="badge badge-mono">${escapeHtml(f.rule_id)}</span></td>
         <td class="font-mono"><strong>${f.severity.toFixed(2)}</strong></td>
         <td><span class="badge alert-warning">ANOMALY</span></td>
         <td>
@@ -1175,23 +2460,29 @@ async function loadMLAnomalies() {
       tbody.appendChild(tr);
     });
   } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return;
     tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Error loading anomalies: ${err.message}</td></tr>`;
   }
 }
 
 async function loadCorrelations() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.correlations;
   const tbody = document.getElementById('correlations-tbody');
+  if (!tbody) return;
   const rtype = document.getElementById('filter-rel-type').value;
 
-  let query = `/correlation/relationships?investigation_id=${state.activeInvestigationId}&limit=100`;
+  let query = `/correlation/relationships?investigation_id=${currentInvId}&limit=100`;
   if (rtype) query += `&relationship_type=${rtype}`;
 
   try {
     const res = await apiRequest(query);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.correlations) return; // Stale guard
     tbody.innerHTML = '';
     if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No evidence correlations discovered yet. Run "Correlate" — requires at least 2 normalized evidence records.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No evidence correlations discovered yet. Requires >= 2 normalized evidence records.</td></tr>';
       return;
     }
     res.items.forEach(rel => {
@@ -1199,8 +2490,8 @@ async function loadCorrelations() {
       tr.innerHTML = `
         <td><span class="badge badge-mono">${formatEnum(rel.relationship_type)}</span></td>
         <td class="font-mono"><strong>${rel.weight.toFixed(2)}</strong></td>
-        <td class="font-mono text-sm" title="${rel.source_evidence_id}">${compactId(rel.source_evidence_id)}</td>
-        <td class="font-mono text-sm" title="${rel.target_evidence_id}">${compactId(rel.target_evidence_id)}</td>
+        <td class="font-mono text-sm" title="${escapeHtml(rel.source_evidence_id)}">${compactId(rel.source_evidence_id)}</td>
+        <td class="font-mono text-sm" title="${escapeHtml(rel.target_evidence_id)}">${compactId(rel.target_evidence_id)}</td>
         <td>
           <button class="btn btn-secondary btn-sm" onclick="viewDetailModal('Context Attributes', ${escapeHtml(JSON.stringify(rel.context_attributes))})">View Attributes</button>
         </td>
@@ -1208,19 +2499,25 @@ async function loadCorrelations() {
       tbody.appendChild(tr);
     });
   } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.correlations) return;
     tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Error loading correlations: ${err.message}</td></tr>`;
   }
 }
 
 async function loadActivities() {
   if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.activities;
   const tbody = document.getElementById('activities-tbody');
+  if (!tbody) return;
 
   try {
-    const res = await apiRequest(`/activities?investigation_id=${state.activeInvestigationId}&limit=100`);
+    const res = await apiRequest(`/activities?investigation_id=${currentInvId}&limit=100`);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.activities) return; // Stale guard
     tbody.innerHTML = '';
     if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No activity clusters formed yet. Run "Cluster Activities" after correlating evidence.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No activity clusters formed yet. Execute "Cluster Activities" or run the full pipeline.</td></tr>';
       return;
     }
     res.items.forEach(act => {
@@ -1228,7 +2525,7 @@ async function loadActivities() {
       tr.innerHTML = `
         <td><strong>${escapeHtml(act.title)}</strong></td>
         <td><span class="badge badge-mono">${formatEnum(act.activity_type)}</span></td>
-        <td><span class="badge badge-open">${act.status}</span></td>
+        <td><span class="badge badge-open">${escapeHtml(act.status)}</span></td>
         <td class="text-sm">${new Date(act.start_time).toLocaleString()}</td>
         <td class="text-sm">${new Date(act.end_time).toLocaleString()}</td>
         <td class="font-mono">${act.evidence_count}</td>
@@ -1250,20 +2547,1273 @@ async function loadActivities() {
       tbody.appendChild(tr);
     });
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading activities: ${err.message}</td></tr>`;
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.activities) return;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">Error loading activities: ${err.message}</td></tr>`;
   }
 }
 
-async function loadSources() {
-  if (!state.activeInvestigationId) return;
-  try {
-    const sources = await apiRequest(`/investigations/${state.activeInvestigationId}/sources`);
-    renderSourcesTable(sources);
-  } catch (err) {
-    showAlert(`Failed to refresh sources: ${err.message}`, 'danger');
+// ==========================================================================
+// Phase 3: Evidence Explorer & Finding Proof Traceability
+// ==========================================================================
+
+function populateEvidenceSourceFilter(sources) {
+  const select = document.getElementById('filter-evidence-source');
+  if (!select) return;
+  const currentVal = select.value;
+  select.innerHTML = '<option value="">All Evidence Sources</option>';
+  if (sources && sources.length > 0) {
+    sources.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.filename} (${s.file_format})`;
+      if (s.id === currentVal) opt.selected = true;
+      select.appendChild(opt);
+    });
   }
+}
+
+window.exploreSourceRecords = function(sourceId) {
+  const select = document.getElementById('filter-evidence-source');
+  if (select) select.value = sourceId;
+  state.evidencePagination.source_id = sourceId;
+  state.evidencePagination.offset = 0;
+  loadEvidenceRecords();
+  const explorerPanel = document.getElementById('evidence-records-panel');
+  if (explorerPanel) {
+    explorerPanel.scrollIntoView({ behavior: 'smooth' });
+  }
+};
+
+function formatOffsetBadge(sourceId, rawOffset) {
+  const safeOffset = (rawOffset !== null && rawOffset !== undefined) ? rawOffset : 0;
+  const source = state.sourcesCache.get(sourceId);
+  const format = source ? (source.file_format || '').toUpperCase() : '';
+
+  if (format === 'CSV') {
+    return `<span class="tag-offset" title="0-indexed data row in source CSV (header excluded)">Data Row ${safeOffset}</span>`;
+  } else if (format === 'JSON') {
+    return `<span class="tag-offset" title="Array item index in source JSON payload">Index [${safeOffset}]</span>`;
+  } else if (format === 'JSONL' || format === 'LOG') {
+    return `<span class="tag-offset" title="Record index in source stream (empty lines excluded)">Record ${safeOffset}</span>`;
+  }
+  return `<span class="tag-offset" title="Raw source record stream offset">Offset ${safeOffset}</span>`;
+}
+
+function middleTruncate(str, frontLen = 10, backLen = 8) {
+  if (!str) return '—';
+  if (str.length <= frontLen + backLen + 3) return str;
+  return `${str.substring(0, frontLen)}…${str.substring(str.length - backLen)}`;
+}
+
+async function loadEvidenceRecords() {
+  if (!state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.evidence;
+  const tbody = document.getElementById('evidence-records-tbody');
+  if (!tbody) return;
+
+  const reqId = ++state.evidencePagination.requestId;
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Loading normalized evidence records...</td></tr>';
+
+  const { offset, limit, source_id, event_type, user_id, device_id } = state.evidencePagination;
+  let query = `/evidence?investigation_id=${currentInvId}&limit=${limit}&offset=${offset}`;
+  if (source_id) query += `&source_id=${encodeURIComponent(source_id)}`;
+  if (event_type) query += `&event_type=${encodeURIComponent(event_type)}`;
+  if (user_id) query += `&user_id=${encodeURIComponent(user_id)}`;
+  if (device_id) query += `&device_id=${encodeURIComponent(device_id)}`;
+
+  try {
+    const res = await apiRequest(query);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.evidence || reqId !== state.evidencePagination.requestId) return;
+
+    state.evidencePagination.total = res.total || 0;
+    renderEvidenceRecordsTable(res.items || [], res.total || 0);
+    updateEvidencePaginationControls(res.total || 0, res.offset || 0, res.limit || 25);
+  } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.evidence || reqId !== state.evidencePagination.requestId) return;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading evidence records: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderEvidenceRecordsTable(items, total) {
+  const tbody = document.getElementById('evidence-records-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  state.currentEvidenceItems = items || [];
+
+  if (!items || items.length === 0) {
+    renderEvidenceInspector(null);
+    if (total === 0) {
+      const hasFilters = state.evidencePagination.source_id ||
+                         state.evidencePagination.event_type ||
+                         state.evidencePagination.user_id ||
+                         state.evidencePagination.device_id;
+      if (hasFilters) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No evidence records match the current filter criteria.</td></tr>';
+      } else {
+        const totalSources = state.sourcesCache.size;
+        let anyNormalized = false;
+        state.sourcesCache.forEach(s => {
+          if (s.normalized_records > 0) anyNormalized = true;
+        });
+        if (totalSources > 0 && !anyNormalized) {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Evidence sources are staged but unnormalized. Run Stage 1 (Normalize) to populate normalized events.</td></tr>';
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No evidence records found in this investigation. Import and normalize evidence to explore events.</td></tr>';
+        }
+      }
+    } else {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No records on this page.</td></tr>';
+    }
+    return;
+  }
+
+  // Stable selection: preserve current selection if still in view, otherwise auto-select first row
+  let activeIdToSelect = null;
+  if (state.selectedEvidenceId && items.some(ev => ev.id === state.selectedEvidenceId)) {
+    activeIdToSelect = state.selectedEvidenceId;
+  } else if (items.length > 0) {
+    activeIdToSelect = items[0].id;
+  }
+  state.selectedEvidenceId = activeIdToSelect;
+
+  items.forEach(ev => {
+    const isSelected = (ev.id === activeIdToSelect);
+    const tr = document.createElement('tr');
+    tr.className = `evidence-row ${isSelected ? 'row-selected' : ''}`;
+    tr.setAttribute('data-evidence-id', ev.id);
+    tr.setAttribute('tabindex', '0');
+    tr.setAttribute('role', 'row');
+    tr.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+
+    const src = state.sourcesCache.get(ev.source_id);
+    const srcFilename = src ? src.filename : 'Evidence Source';
+    const offsetBadge = formatOffsetBadge(ev.source_id, ev.raw_record_offset);
+
+    // Format Key Entities
+    const entities = [];
+    if (ev.process_name) entities.push(`<span class="font-mono" style="font-size: 11px;">proc: ${escapeHtml(ev.process_name)}</span>`);
+    if (ev.ip_address) entities.push(`<span class="font-mono" style="font-size: 11px;">ip: ${escapeHtml(ev.ip_address)}</span>`);
+    if (ev.file_path) entities.push(`<span class="font-mono" style="font-size: 11px;">file: ${escapeHtml(ev.file_path.split(/[/\\]/).pop())}</span>`);
+    const entitiesHtml = entities.length > 0 ? entities.join('<br>') : '<span class="text-muted">—</span>';
+
+    // Format User / Device
+    let userDeviceHtml = '<span class="text-muted">—</span>';
+    if (ev.user_id || ev.device_id) {
+      userDeviceHtml = `
+        <div style="font-size: 11px;">
+          ${ev.user_id ? `<strong>${escapeHtml(ev.user_id)}</strong>` : '<span class="text-muted">No user</span>'}
+          ${ev.device_id ? `<br><span class="text-muted text-sm">${escapeHtml(ev.device_id)}</span>` : ''}
+        </div>
+      `;
+    }
+
+    // Format Action / Status
+    let actionStatusHtml = '<span class="text-muted">—</span>';
+    if (ev.action || ev.status) {
+      actionStatusHtml = `
+        <div style="font-size: 11px;">
+          ${ev.action ? `<span>${escapeHtml(ev.action)}</span>` : ''}
+          ${ev.status ? `<br><span class="badge badge-mono">${escapeHtml(ev.status)}</span>` : ''}
+        </div>
+      `;
+    }
+
+    tr.innerHTML = `
+      <td class="text-sm font-mono" style="white-space: nowrap;">${new Date(ev.timestamp).toLocaleString()}</td>
+      <td><span class="badge badge-mono">${escapeHtml(ev.event_type)}</span></td>
+      <td>
+        <div style="font-size: 11px;">
+          <strong title="${escapeHtml(srcFilename)}">${escapeHtml(srcFilename)}</strong>
+          <div style="margin-top: 2px;">${offsetBadge}</div>
+        </div>
+      </td>
+      <td>${userDeviceHtml}</td>
+      <td>${actionStatusHtml}</td>
+      <td>${entitiesHtml}</td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="viewEvidenceDetailModal('${escapeHtml(ev.id)}')" title="Inspect complete normalized attributes and raw record payload">Inspect</button>
+      </td>
+    `;
+
+    // Row selection interactions
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input')) return;
+      selectEvidenceRecord(ev.id);
+    });
+
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectEvidenceRecord(ev.id);
+      }
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  // Render initial inspector state
+  if (activeIdToSelect) {
+    const selectedItem = items.find(i => i.id === activeIdToSelect);
+    if (selectedItem) {
+      renderEvidenceInspector(selectedItem, null, [], true, null);
+      loadEvidenceInspector(activeIdToSelect);
+    }
+  } else {
+    renderEvidenceInspector(null);
+  }
+}
+
+function selectEvidenceRecord(evidenceId) {
+  state.selectedEvidenceId = evidenceId;
+
+  // Update table row styling & aria attributes
+  const tbody = document.getElementById('evidence-records-tbody');
+  if (tbody) {
+    tbody.querySelectorAll('tr.evidence-row').forEach(row => {
+      const rowId = row.getAttribute('data-evidence-id');
+      if (evidenceId && rowId === evidenceId) {
+        row.classList.add('row-selected');
+        row.setAttribute('aria-selected', 'true');
+      } else {
+        row.classList.remove('row-selected');
+        row.setAttribute('aria-selected', 'false');
+      }
+    });
+  }
+
+  if (!evidenceId) {
+    renderEvidenceInspector(null);
+    return;
+  }
+
+  // Fast optimistic render from memory while full details and findings load
+  const cachedItem = (state.currentEvidenceItems || []).find(i => i.id === evidenceId);
+  if (cachedItem) {
+    renderEvidenceInspector(cachedItem, null, [], true, null);
+  }
+
+  loadEvidenceInspector(evidenceId);
+}
+
+function selectNextEvidenceRow() {
+  const items = state.currentEvidenceItems || [];
+  if (items.length === 0) return;
+  if (!state.selectedEvidenceId) {
+    selectEvidenceRecord(items[0].id);
+    scrollSelectedRowIntoView(items[0].id);
+    return;
+  }
+  const currIdx = items.findIndex(i => i.id === state.selectedEvidenceId);
+  if (currIdx >= 0 && currIdx < items.length - 1) {
+    const nextEv = items[currIdx + 1];
+    selectEvidenceRecord(nextEv.id);
+    scrollSelectedRowIntoView(nextEv.id);
+  }
+}
+
+function selectPreviousEvidenceRow() {
+  const items = state.currentEvidenceItems || [];
+  if (items.length === 0) return;
+  if (!state.selectedEvidenceId) {
+    selectEvidenceRecord(items[0].id);
+    scrollSelectedRowIntoView(items[0].id);
+    return;
+  }
+  const currIdx = items.findIndex(i => i.id === state.selectedEvidenceId);
+  if (currIdx > 0) {
+    const prevEv = items[currIdx - 1];
+    selectEvidenceRecord(prevEv.id);
+    scrollSelectedRowIntoView(prevEv.id);
+  }
+}
+
+function scrollSelectedRowIntoView(evidenceId) {
+  const tbody = document.getElementById('evidence-records-tbody');
+  if (!tbody) return;
+  const row = tbody.querySelector(`tr[data-evidence-id="${evidenceId}"]`);
+  if (row) {
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    row.focus({ preventScroll: true });
+  }
+}
+
+async function loadEvidenceInspector(evidenceId) {
+  if (!evidenceId || !state.activeInvestigationId) return;
+  const currentInvId = state.activeInvestigationId;
+  const invVersion = state.investigationVersion;
+  const seq = ++state.requestSeq.inspector;
+
+  try {
+    const item = await apiRequest(`/evidence/${evidenceId}?investigation_id=${encodeURIComponent(currentInvId)}`);
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.inspector || state.selectedEvidenceId !== evidenceId) return;
+
+    // Check findings referencing this evidence
+    let relatedFindings = [];
+    try {
+      const findingsRes = await apiRequest(`/detection/findings?investigation_id=${encodeURIComponent(currentInvId)}&limit=100`);
+      if (invVersion === state.investigationVersion && seq === state.requestSeq.inspector) {
+        relatedFindings = (findingsRes.items || []).filter(f => f.evidence_ids && f.evidence_ids.includes(evidenceId));
+      }
+    } catch {
+      // Non-fatal, show without findings
+    }
+
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.inspector || state.selectedEvidenceId !== evidenceId) return;
+    renderEvidenceInspector(item, item, relatedFindings, false, null);
+  } catch (err) {
+    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.inspector || state.selectedEvidenceId !== evidenceId) return;
+    renderEvidenceInspector(null, null, [], false, err.message);
+  }
+}
+
+function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], isLoading = false, error = null) {
+  const quickBadge = document.getElementById('inspector-quick-badge');
+  const content = document.getElementById('evidence-inspector-content');
+  if (!content) return;
+
+  if (error) {
+    if (quickBadge) quickBadge.style.display = 'none';
+    content.innerHTML = `<div class="alert alert-danger" style="margin: 16px;">Failed to load evidence details: ${escapeHtml(error)}</div>`;
+    return;
+  }
+
+  if (!ev) {
+    if (quickBadge) quickBadge.style.display = 'none';
+    content.innerHTML = `
+      <div class="inspector-empty-state" style="padding: 32px 16px; text-align: center; color: var(--text-secondary);">
+        <div style="font-size: 24px; margin-bottom: 8px; opacity: 0.5;">🔍</div>
+        <div style="font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">No Event Selected</div>
+        <div class="text-sm text-muted">
+          Select an evidence event from the table or press <kbd class="kbd-hint">J</kbd> / <kbd class="kbd-hint">K</kbd> to inspect normalized attributes, forensic provenance, and threat context.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const item = fullDetails || ev;
+  if (quickBadge) {
+    quickBadge.textContent = item.event_type || 'EVENT';
+    quickBadge.style.display = 'inline-block';
+  }
+
+  const src = state.sourcesCache.get(item.source_id);
+  const srcFilename = src ? src.filename : 'Evidence Source';
+  const srcFormat = src ? (src.file_format || 'RAW') : (item.source_type || 'RAW');
+  const srcDigest = src ? (src.sha256_hash || '') : '';
+  const offsetBadge = formatOffsetBadge(item.source_id, item.raw_record_offset);
+  const rawAttrs = item.attributes || {};
+
+  // Formatted Timestamps
+  const isoTime = item.timestamp ? (new Date(item.timestamp).toISOString()) : '—';
+  const localTime = item.timestamp ? (new Date(item.timestamp).toLocaleString()) : '—';
+
+  // Command line if present
+  const cmdLine = rawAttrs.command_line || rawAttrs.cmdline || rawAttrs.command || null;
+
+  // Hash value display (prominently labeled CLAIMED UNVERIFIED)
+  let hashDisplayHtml = '';
+  if (item.file_hash) {
+    hashDisplayHtml = `
+      <div class="inspector-kv" style="grid-column: 1 / -1;">
+        <div class="inspector-k" style="display: flex; align-items: center; justify-content: space-between;">
+          <span>Log-Extracted File Hash</span>
+          <span class="badge badge-mono text-xs" style="background: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3);">
+            CLAIMED (UNVERIFIED)
+          </span>
+        </div>
+        <div class="inspector-v" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
+          <span class="font-mono text-xs" style="word-break: break-all;" title="${escapeHtml(item.file_hash)}">
+            ${middleTruncate(item.file_hash, 12, 10)}
+          </span>
+          <button class="btn btn-secondary btn-sm" onclick="copyDigest('${escapeHtml(item.file_hash)}', this)" title="Copy log-extracted hash">Copy</button>
+        </div>
+        <div class="text-xs text-muted" style="margin-top: 4px;">
+          Hash value parsed directly from log event stream. Not independently verified against physical disk artifacts.
+        </div>
+      </div>
+    `;
+  } else {
+    hashDisplayHtml = `
+      <div class="inspector-kv" style="grid-column: 1 / -1;">
+        <div class="inspector-k">Log-Extracted File Hash</div>
+        <div class="inspector-v text-muted text-sm">No cryptographic digest recorded in this event payload.</div>
+      </div>
+    `;
+  }
+
+  // Data Quality Notice
+  let dataQualityHtml = '';
+  if (rawAttrs._data_quality_warning) {
+    dataQualityHtml = `
+      <div class="alert alert-warning text-xs" style="margin-bottom: 12px; padding: 8px 10px;">
+        <strong>Data Quality Notice:</strong> Raw event deserialization required fallback parsing.
+      </div>
+    `;
+  } else if (rawAttrs.hash_metadata && !rawAttrs.hash_metadata.is_valid && rawAttrs.hash_metadata.status !== 'MISSING') {
+    dataQualityHtml = `
+      <div class="alert alert-warning text-xs" style="margin-bottom: 12px; padding: 8px 10px;">
+        <strong>Non-Standard Hash Notice:</strong> ${escapeHtml(rawAttrs.hash_metadata.status || 'Format Anomaly')}
+      </div>
+    `;
+  }
+
+  // Related Findings
+  let findingsHtml = '';
+  if (relatedFindings && relatedFindings.length > 0) {
+    findingsHtml = relatedFindings.map(f => `
+      <div class="inspector-finding-card" style="padding: 10px; background: var(--surface-bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;">
+          <strong class="font-mono text-xs">${escapeHtml(f.rule_id || formatEnum(f.finding_type))}</strong>
+          <span class="badge ${f.severity >= 0.7 ? 'badge-critical' : f.severity >= 0.4 ? 'badge-high' : 'badge-mono'} text-xs">
+            Sev ${f.severity.toFixed(2)}
+          </span>
+        </div>
+        <div class="text-xs text-muted" style="margin-bottom: 6px;">${escapeHtml(f.description || '')}</div>
+        ${f.mitre_tactic ? `<div class="badge badge-mono text-xs" style="margin-bottom: 6px;">${escapeHtml(f.mitre_tactic)} / ${escapeHtml(f.mitre_technique || '')}</div>` : ''}
+        <div>
+          <button class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 2px 8px;" onclick="viewFindingProofModal('${escapeHtml(f.id)}')">Inspect Finding Proof</button>
+        </div>
+      </div>
+    `).join('');
+  } else {
+    findingsHtml = `<div class="text-xs text-muted">No detection rules or ML anomalies flagged this specific evidence record.</div>`;
+  }
+
+  content.innerHTML = `
+    ${dataQualityHtml}
+
+    <!-- Core Identity -->
+    <div class="inspector-section">
+      <div class="inspector-section-title">Core Event Identity</div>
+      <div class="inspector-kv-grid">
+        <div class="inspector-kv" style="grid-column: 1 / -1;">
+          <div class="inspector-k">Evidence ID</div>
+          <div class="inspector-v font-mono text-xs" style="word-break: break-all;">${escapeHtml(item.id)}</div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Event Type</div>
+          <div class="inspector-v"><span class="badge badge-mono">${escapeHtml(item.event_type)}</span></div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Source Type</div>
+          <div class="inspector-v"><span class="badge badge-mono text-xs">${escapeHtml(item.source_type || 'RAW')}</span></div>
+        </div>
+        <div class="inspector-kv" style="grid-column: 1 / -1;">
+          <div class="inspector-k">Timestamp</div>
+          <div class="inspector-v font-mono text-xs">${escapeHtml(isoTime)}</div>
+          <div class="text-xs text-muted" style="margin-top: 2px;">${escapeHtml(localTime)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Source Provenance -->
+    <div class="inspector-section">
+      <div class="inspector-section-title">Source Provenance</div>
+      <div class="inspector-kv-grid">
+        <div class="inspector-kv" style="grid-column: 1 / -1;">
+          <div class="inspector-k">Source File</div>
+          <div class="inspector-v">
+            <strong>${escapeHtml(srcFilename)}</strong>
+            <span class="badge badge-mono text-xs" style="margin-left: 6px;">${escapeHtml(srcFormat)}</span>
+          </div>
+        </div>
+        <div class="inspector-kv" style="grid-column: 1 / -1;">
+          <div class="inspector-k">Source File SHA-256 (Recorded at Ingestion)</div>
+          <div class="inspector-v" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <span class="font-mono text-xs" style="word-break: break-all;" title="${escapeHtml(srcDigest)}">
+              ${middleTruncate(srcDigest, 12, 10)}
+            </span>
+            ${srcDigest ? `<button class="btn btn-secondary btn-sm" onclick="copyDigest('${escapeHtml(srcDigest)}', this)" title="Copy full source SHA-256 digest">Copy</button>` : ''}
+          </div>
+          <div class="text-xs text-muted" style="margin-top: 2px;">
+            Cryptographic SHA-256 digest recorded at initial file ingestion.
+          </div>
+        </div>
+        <div class="inspector-kv" style="grid-column: 1 / -1;">
+          <div class="inspector-k">Source Stream Offset</div>
+          <div class="inspector-v" style="margin-top: 2px;">${offsetBadge}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Common Event Schema Entities -->
+    <div class="inspector-section">
+      <div class="inspector-section-title">CES Normalized Entities</div>
+      <div class="inspector-kv-grid">
+        <div class="inspector-kv">
+          <div class="inspector-k">User ID</div>
+          <div class="inspector-v font-mono text-xs">${item.user_id ? escapeHtml(item.user_id) : '<span class="text-muted">—</span>'}</div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Device ID</div>
+          <div class="inspector-v font-mono text-xs">${item.device_id ? escapeHtml(item.device_id) : '<span class="text-muted">—</span>'}</div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Process Name</div>
+          <div class="inspector-v font-mono text-xs">${item.process_name ? escapeHtml(item.process_name) : '<span class="text-muted">—</span>'}</div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Process ID</div>
+          <div class="inspector-v font-mono text-xs">${(item.process_id !== null && item.process_id !== undefined) ? item.process_id : '<span class="text-muted">—</span>'}</div>
+        </div>
+        ${item.parent_process_name ? `
+          <div class="inspector-kv" style="grid-column: 1 / -1;">
+            <div class="inspector-k">Parent Process</div>
+            <div class="inspector-v font-mono text-xs">${escapeHtml(item.parent_process_name)}</div>
+          </div>
+        ` : ''}
+        ${cmdLine ? `
+          <div class="inspector-kv" style="grid-column: 1 / -1;">
+            <div class="inspector-k">Command Line</div>
+            <div class="inspector-v font-mono text-xs" style="white-space: pre-wrap; word-break: break-all; background: var(--surface-bg-card); padding: 6px; border-radius: 4px; border: 1px solid var(--border-subtle);">${escapeHtml(cmdLine)}</div>
+          </div>
+        ` : ''}
+        <div class="inspector-kv">
+          <div class="inspector-k">Network IP / Port</div>
+          <div class="inspector-v font-mono text-xs">
+            ${item.ip_address ? `${escapeHtml(item.ip_address)}${item.port ? `:${item.port}` : ''}` : '<span class="text-muted">—</span>'}
+          </div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Protocol</div>
+          <div class="inspector-v font-mono text-xs">${item.protocol ? escapeHtml(item.protocol) : '<span class="text-muted">—</span>'}</div>
+        </div>
+        ${item.file_path ? `
+          <div class="inspector-kv" style="grid-column: 1 / -1;">
+            <div class="inspector-k">File Path</div>
+            <div class="inspector-v font-mono text-xs" style="word-break: break-all;">${escapeHtml(item.file_path)}</div>
+          </div>
+        ` : ''}
+        <div class="inspector-kv">
+          <div class="inspector-k">Action</div>
+          <div class="inspector-v text-xs">${item.action ? escapeHtml(item.action) : '<span class="text-muted">—</span>'}</div>
+        </div>
+        <div class="inspector-kv">
+          <div class="inspector-k">Status</div>
+          <div class="inspector-v text-xs">${item.status ? `<span class="badge badge-mono">${escapeHtml(item.status)}</span>` : '<span class="text-muted">—</span>'}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Integrity & Extracted Log Metadata -->
+    <div class="inspector-section">
+      <div class="inspector-section-title">Integrity &amp; Metadata</div>
+      <div class="inspector-kv-grid">
+        ${hashDisplayHtml}
+      </div>
+    </div>
+
+    <!-- Threat Context & Related Findings -->
+    <div class="inspector-section">
+      <div class="inspector-section-title">Related Findings &amp; Threat Context (${relatedFindings.length})</div>
+      <div>${findingsHtml}</div>
+    </div>
+
+    <!-- Actions & Shortcuts -->
+    <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px;">
+      <button class="btn btn-secondary btn-sm" style="width: 100%; text-align: center;" onclick="viewEvidenceDetailModal('${escapeHtml(item.id)}')">
+        Inspect Complete Raw JSON Payload
+      </button>
+      <div class="text-xs text-muted" style="text-align: center; margin-top: 4px;">
+        Shortcuts: <kbd class="kbd-hint">J</kbd> Next <kbd class="kbd-hint">K</kbd> Prev <kbd class="kbd-hint">Esc</kbd> Close Inspector
+      </div>
+    </div>
+  `;
+}
+
+function updateEvidencePaginationControls(total, offset, limit) {
+  const pageInfo = document.getElementById('evidence-page-info');
+  const recordSummary = document.getElementById('evidence-record-summary');
+  const btnPrev = document.getElementById('btn-evidence-prev');
+  const btnNext = document.getElementById('btn-evidence-next');
+
+  if (total === 0) {
+    if (pageInfo) pageInfo.textContent = 'Page 1 of 1';
+    if (recordSummary) recordSummary.textContent = 'Showing 0 records';
+    if (btnPrev) btnPrev.disabled = true;
+    if (btnNext) btnNext.disabled = true;
+    return;
+  }
+
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const startRecord = offset + 1;
+  const endRecord = Math.min(offset + limit, total);
+
+  if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+  if (recordSummary) recordSummary.textContent = `Showing ${startRecord}–${endRecord} of ${total} records`;
+  if (btnPrev) btnPrev.disabled = (currentPage <= 1);
+  if (btnNext) btnNext.disabled = (currentPage >= totalPages);
+}
+
+window.viewEvidenceDetailModal = async function(evidenceId) {
+  const titleEl = document.getElementById('modal-detail-title');
+  const tierBadge = document.getElementById('modal-detail-tier-badge');
+  const explainPanel = document.getElementById('modal-explainability-panel');
+  const provPanel = document.getElementById('modal-provenance-panel');
+  const genericPanel = document.getElementById('modal-generic-panel');
+  const proofPanel = document.getElementById('modal-finding-proof-panel');
+  const evDetailPanel = document.getElementById('modal-evidence-detail-panel');
+  const evContent = document.getElementById('modal-evidence-detail-content');
+
+  // Reset panels
+  if (explainPanel) explainPanel.style.display = 'none';
+  if (provPanel) provPanel.style.display = 'none';
+  if (genericPanel) genericPanel.style.display = 'none';
+  if (proofPanel) proofPanel.style.display = 'none';
+  if (tierBadge) tierBadge.style.display = 'none';
+
+  titleEl.textContent = 'Forensic Evidence Record Inspection';
+  if (evDetailPanel) evDetailPanel.style.display = 'block';
+  if (evContent) evContent.innerHTML = '<div class="text-center text-muted" style="padding: 24px;">Loading evidence record attributes...</div>';
+
+  if (window.openModal) window.openModal('modal-detail');
+
+  try {
+    const invId = state.activeInvestigationId;
+    const item = await apiRequest(`/evidence/${evidenceId}${invId ? `?investigation_id=${encodeURIComponent(invId)}` : ''}`);
+    const src = state.sourcesCache.get(item.source_id);
+    const srcFilename = src ? src.filename : 'Unknown Evidence Source';
+    const srcFormat = src ? src.file_format : (item.source_type || 'RAW');
+    const srcHash = src ? src.sha256_hash : 'Not recorded';
+    const srcSize = src ? formatBytes(src.file_size_bytes) : '—';
+    const offsetBadge = formatOffsetBadge(item.source_id, item.raw_record_offset);
+
+    titleEl.textContent = `Evidence Record: ${item.event_type}`;
+
+    const rawAttributes = item.attributes || {};
+    const rawJsonStr = JSON.stringify(rawAttributes, null, 2);
+
+    let dataQualityBanner = '';
+    if (rawAttributes._data_quality_warning) {
+      dataQualityBanner = `
+        <div class="alert alert-warning" style="margin-bottom: 16px; border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 4px;">
+          <div style="font-weight: 600; color: #f59e0b; margin-bottom: 4px;">Data Quality Notice — Deserialization Fallback</div>
+          <div style="font-size: 12px;">This record was loaded via defensive recovery to preserve raw database attributes without silent truncation.</div>
+          <div class="font-mono text-sm" style="margin-top: 4px; color: #94a3b8;">${escapeHtml(rawAttributes._data_quality_warning.error_detail || '')}</div>
+        </div>
+      `;
+    } else if (rawAttributes.hash_metadata && !rawAttributes.hash_metadata.is_valid && rawAttributes.hash_metadata.status !== 'MISSING') {
+      dataQualityBanner = `
+        <div class="alert alert-warning" style="margin-bottom: 16px; border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 4px;">
+          <div style="font-weight: 600; color: #f59e0b; margin-bottom: 4px;">Non-Standard Hash Notice — ${escapeHtml(rawAttributes.hash_metadata.status)}</div>
+          <div style="font-size: 12px;">Supplied hash does not conform to standard verified cryptographic lengths. Raw string is preserved in full for forensic traceability.</div>
+          <div class="font-mono text-sm" style="margin-top: 4px; color: #94a3b8;">${escapeHtml(rawAttributes.hash_metadata.error || '')}</div>
+        </div>
+      `;
+    }
+
+    let hashBadgeHtml = '';
+    if (rawAttributes.hash_metadata) {
+      const hm = rawAttributes.hash_metadata;
+      if (hm.status && hm.status !== 'VALID' && hm.status !== 'MISSING') {
+        hashBadgeHtml = ` <span class="badge badge-warning text-xs" style="color: #f59e0b;">${escapeHtml(hm.status)}</span>`;
+      } else if (hm.verification_status === 'UNVERIFIED') {
+        hashBadgeHtml = ` <span class="badge badge-mono text-xs" title="Log-extracted claimed hash; not independently byte-verified against file on disk">CLAIMED (UNVERIFIED)</span>`;
+      }
+    }
+
+    evContent.innerHTML = `
+      <div class="proof-container">
+        ${dataQualityBanner}
+        <!-- Provenance Section -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Evidence Integrity &amp; Provenance Traceability
+            </span>
+          </div>
+          <div class="proof-grid">
+            <div class="proof-item">
+              <span class="proof-item-label">Investigation Container</span>
+              <span class="proof-item-value">${escapeHtml(state.summary?.investigation?.case_number || 'ACTIVE_CASE')} (${escapeHtml(item.investigation_id)})</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Source File</span>
+              <span class="proof-item-value"><strong>${escapeHtml(srcFilename)}</strong> (${escapeHtml(srcFormat)})</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">File SHA-256 Integrity Hash</span>
+              <span class="proof-item-value font-mono text-sm" style="word-break: break-all;">${escapeHtml(srcHash)}</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Source Record Offset</span>
+              <div class="proof-item-value">${offsetBadge}</div>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">File Size</span>
+              <span class="proof-item-value">${escapeHtml(srcSize)}</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Normalized At</span>
+              <span class="proof-item-value text-sm">${new Date(item.normalized_at || item.created_at || Date.now()).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- CES Normalized Schema Fields -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
+              Common Evidence Schema (CES) Fields
+            </span>
+          </div>
+          <div class="ces-fields-container">
+            <div class="ces-card">
+              <span class="ces-card-label">Event Timestamp</span>
+              <span class="ces-card-value font-mono">${new Date(item.timestamp).toLocaleString()}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">Event Type</span>
+              <span class="ces-card-value"><span class="badge badge-mono">${escapeHtml(item.event_type)}</span></span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">Action &amp; Status</span>
+              <span class="ces-card-value">${escapeHtml(item.action || '—')} / ${escapeHtml(item.status || '—')}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">User ID &amp; Session</span>
+              <span class="ces-card-value">${escapeHtml(item.user_id || '—')} ${item.session_id ? `(${escapeHtml(item.session_id)})` : ''}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">Device ID</span>
+              <span class="ces-card-value">${escapeHtml(item.device_id || '—')}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">Process (PID / Name)</span>
+              <span class="ces-card-value">${item.process_id ? `[${item.process_id}] ` : ''}${escapeHtml(item.process_name || '—')}${item.parent_process_name ? ` (parent: ${escapeHtml(item.parent_process_name)})` : ''}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">Network (IP / Port / Protocol)</span>
+              <span class="ces-card-value">${escapeHtml(item.ip_address || '—')}${item.port ? `:${item.port}` : ''} ${item.protocol ? `(${escapeHtml(item.protocol)})` : ''}</span>
+            </div>
+            <div class="ces-card">
+              <span class="ces-card-label">File Path &amp; Hash</span>
+              <span class="ces-card-value">${escapeHtml(item.file_path || '—')}${item.file_hash ? `<br><span class="font-mono text-sm">${escapeHtml(item.file_hash)}</span>${hashBadgeHtml}` : ''}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw Source Record Attributes -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              Raw Source Record Attributes (_raw_fields)
+            </span>
+          </div>
+          <div class="raw-json-viewer">
+            <button class="btn btn-secondary btn-sm btn-copy-json" onclick="copyRawJson(this)">Copy JSON</button>
+            <pre id="raw-json-pre">${escapeHtml(rawJsonStr)}</pre>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    evContent.innerHTML = `<div class="alert alert-danger">Error retrieving evidence details: ${escapeHtml(err.message)}</div>`;
+  }
+};
+
+window.viewFindingProofModal = async function(findingId) {
+  const titleEl = document.getElementById('modal-detail-title');
+  const tierBadge = document.getElementById('modal-detail-tier-badge');
+  const explainPanel = document.getElementById('modal-explainability-panel');
+  const provPanel = document.getElementById('modal-provenance-panel');
+  const genericPanel = document.getElementById('modal-generic-panel');
+  const proofPanel = document.getElementById('modal-finding-proof-panel');
+  const evDetailPanel = document.getElementById('modal-evidence-detail-panel');
+  const proofContent = document.getElementById('modal-finding-proof-content');
+
+  // Reset panels
+  if (explainPanel) explainPanel.style.display = 'none';
+  if (provPanel) provPanel.style.display = 'none';
+  if (genericPanel) genericPanel.style.display = 'none';
+  if (evDetailPanel) evDetailPanel.style.display = 'none';
+  if (tierBadge) tierBadge.style.display = 'none';
+
+  titleEl.textContent = 'Finding Proof & Traceability';
+  if (proofPanel) proofPanel.style.display = 'block';
+  if (proofContent) proofContent.innerHTML = '<div class="text-center text-muted" style="padding: 24px;">Resolving finding proof and evidence chain...</div>';
+
+  if (window.openModal) window.openModal('modal-detail');
+
+  try {
+    const invId = state.activeInvestigationId;
+    const finding = await apiRequest(`/detection/findings/${findingId}${invId ? `?investigation_id=${encodeURIComponent(invId)}` : ''}`);
+    titleEl.textContent = `Finding Proof: ${finding.rule_id || formatEnum(finding.finding_type)}`;
+
+    const evidenceIds = finding.evidence_ids || [];
+    const evIdSet = new Set(evidenceIds.map(String));
+
+    // Parallel fetch: Supporting Evidence, Priority Results, Correlations & Activities
+    let evError = null;
+    let prioError = null;
+    let corrError = null;
+    let actError = null;
+
+    const fetchEvidencePromise = (evidenceIds.length > 0)
+      ? apiRequest(`/evidence?investigation_id=${invId}&ids=${evidenceIds.join(',')}&limit=100`)
+          .catch(err => {
+            evError = err.message || 'Failed to retrieve supporting evidence records';
+            return { items: [], total: 0 };
+          })
+      : Promise.resolve({ items: [], total: 0 });
+
+    const fetchPrioPromise = apiRequest(`/prioritization/results?investigation_id=${invId}&limit=100`)
+      .catch(err => {
+        prioError = err.message || 'Failed to retrieve prioritization results';
+        return { items: [] };
+      });
+
+    const fetchCorrelationsPromise = apiRequest(`/correlation/relationships?investigation_id=${invId}&limit=100`)
+      .catch(err => {
+        corrError = err.message || 'Failed to retrieve correlation relationships';
+        return { items: [] };
+      });
+
+    const fetchActivitiesPromise = apiRequest(`/activities?investigation_id=${invId}&limit=100`)
+      .catch(err => {
+        actError = err.message || 'Failed to retrieve clustered activities';
+        return { items: [] };
+      });
+
+    const [evRes, prioRes, corrRes, actRes] = await Promise.all([
+      fetchEvidencePromise,
+      fetchPrioPromise,
+      fetchCorrelationsPromise,
+      fetchActivitiesPromise,
+    ]);
+
+    // Check for unresolved evidence references
+    const resolvedEvItems = evRes.items || [];
+    const resolvedMap = new Map(resolvedEvItems.map(it => [String(it.id), it]));
+    const missingEvidenceIds = evidenceIds.filter(id => !resolvedMap.has(String(id)));
+
+    // Filter correlations touching this finding's supporting evidence
+    const relatedCorrelations = (corrRes.items || []).filter(rel =>
+      evIdSet.has(String(rel.source_evidence_id)) || evIdSet.has(String(rel.target_evidence_id))
+    );
+
+    // Filter activities linking this finding or its evidence
+    const relatedActivities = (actRes.items || []).filter(act => {
+      const hasFinding = Array.isArray(act.finding_ids) && act.finding_ids.map(String).includes(String(finding.id));
+      const hasEvidence = Array.isArray(act.evidence_ids) && act.evidence_ids.some(eid => evIdSet.has(String(eid)));
+      return hasFinding || hasEvidence;
+    });
+
+    // Check for prioritization on supporting evidence artifacts or linked activities
+    const actIdSet = new Set(relatedActivities.map(a => String(a.id)));
+    const matchingPriorities = (prioRes.items || []).filter(r =>
+      (r.target_type === 'ARTIFACT' && evIdSet.has(String(r.target_id))) ||
+      (r.target_type === 'ACTIVITY' && actIdSet.has(String(r.target_id)))
+    );
+
+    // Render HTML: Supporting Evidence
+    let supportingEvidenceHtml = '';
+    if (evError) {
+      supportingEvidenceHtml = `<div class="alert alert-danger" style="margin-bottom: 10px;">⚠️ API Error: Failed to retrieve supporting evidence: ${escapeHtml(evError)}</div>`;
+    } else if (evidenceIds.length === 0) {
+      supportingEvidenceHtml = '<div class="alert alert-info">No supporting evidence associations recorded for this finding.</div>';
+    } else {
+      let missingWarningHtml = '';
+      if (missingEvidenceIds.length > 0) {
+        missingWarningHtml = `
+          <div class="alert alert-warning" style="margin-bottom: 10px;">
+            ⚠️ Notice: ${missingEvidenceIds.length} referenced evidence record(s) could not be resolved from storage: ${escapeHtml(missingEvidenceIds.join(', '))}
+          </div>
+        `;
+      }
+
+      let evCardsHtml = '';
+      resolvedEvItems.forEach(ev => {
+        const src = state.sourcesCache.get(ev.source_id);
+        const srcFilename = src ? src.filename : 'Evidence Source';
+        const offsetBadge = formatOffsetBadge(ev.source_id, ev.raw_record_offset);
+
+        evCardsHtml += `
+          <div class="supporting-evidence-card">
+            <div class="supporting-evidence-meta">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="badge badge-mono">${escapeHtml(ev.event_type)}</span>
+                <span class="font-mono text-sm">${new Date(ev.timestamp).toLocaleString()}</span>
+                <strong>${escapeHtml(srcFilename)}</strong>
+                ${offsetBadge}
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">
+                ${ev.user_id ? `<span>User: <strong>${escapeHtml(ev.user_id)}</strong> &nbsp;</span>` : ''}
+                ${ev.device_id ? `<span>Device: ${escapeHtml(ev.device_id)} &nbsp;</span>` : ''}
+                ${ev.process_name ? `<span>Process: <code class="font-mono">${escapeHtml(ev.process_name)}</code> &nbsp;</span>` : ''}
+                ${ev.ip_address ? `<span>IP: <code class="font-mono">${escapeHtml(ev.ip_address)}</code> &nbsp;</span>` : ''}
+                ${ev.action ? `<span>Action: ${escapeHtml(ev.action)} &nbsp;</span>` : ''}
+                ${ev.status ? `<span class="badge badge-mono">${escapeHtml(ev.status)}</span>` : ''}
+              </div>
+            </div>
+            <div>
+              <button class="btn btn-secondary btn-sm" onclick="jumpToEvidenceRecord('${escapeHtml(ev.source_id)}', '${escapeHtml(ev.id)}')" title="Navigate directly to this event in the Evidence Explorer">
+                View in Explorer &rarr;
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      supportingEvidenceHtml = missingWarningHtml + evCardsHtml;
+    }
+
+    // Render HTML: Observed Evidence Associations & Activities
+    let associationsHtml = '';
+    if (corrError) {
+      associationsHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">⚠️ API Error: Failed to retrieve correlation relationships: ${escapeHtml(corrError)}</div>`;
+    } else if (relatedCorrelations.length === 0) {
+      associationsHtml = '<div class="text-sm text-muted">No observed correlation relationships connecting this finding\'s supporting evidence.</div>';
+    } else {
+      associationsHtml = `
+        <div class="text-sm text-muted" style="margin-bottom: 8px;">
+          Multi-dimensional relationships observed between supporting evidence records. Represents observed statistical and structural associations (e.g. temporal proximity, shared identity pivots), not validated causation.
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          ${relatedCorrelations.map(rel => `
+            <div style="padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+              <span><span class="badge badge-mono">${escapeHtml(rel.relationship_type)}</span> (weight: ${rel.weight.toFixed(2)})</span>
+              <span class="font-mono text-muted text-sm">${escapeHtml(compactId(rel.source_evidence_id))} &harr; ${escapeHtml(compactId(rel.target_evidence_id))}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    let activitiesHtml = '';
+    if (actError) {
+      activitiesHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">⚠️ API Error: Failed to retrieve clustered activities: ${escapeHtml(actError)}</div>`;
+    } else if (relatedActivities.length === 0) {
+      activitiesHtml = '<div class="text-sm text-muted">No clustered activity threads incorporate this finding or its supporting evidence.</div>';
+    } else {
+      activitiesHtml = `
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          ${relatedActivities.map(act => `
+            <div style="padding: 6px 10px; background: var(--bg-secondary); border: 1px solid var(--border-subtle); border-radius: 4px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+              <span><strong>${escapeHtml(act.title)}</strong> &nbsp;<span class="badge badge-mono">${formatEnum(act.activity_type)}</span></span>
+              <span class="badge badge-open">${escapeHtml(act.status)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Render HTML: Explainable Prioritization Breakdown
+    let prioHtml = '';
+    if (prioError) {
+      prioHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px;">⚠️ API Error: Failed to retrieve prioritization triage: ${escapeHtml(prioError)}</div>`;
+    } else if (matchingPriorities.length > 0) {
+      prioHtml = matchingPriorities.map(prioResult => {
+        const breakdown = prioResult.factor_breakdown || {};
+        const factors = breakdown.factors || [];
+        return `
+          <div style="margin-bottom: 12px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-subtle);">
+            <div style="display: flex; gap: 14px; align-items: center; margin-bottom: 8px;">
+              <div class="score-badge-container">
+                <span class="score-title">${prioResult.target_type === 'ARTIFACT' ? 'Evidence Priority' : 'Activity Priority'}</span>
+                <div class="score-display">
+                  <span class="score-num font-mono">${prioResult.priority_score.toFixed(1)}</span>
+                  <span class="score-max">/ 100</span>
+                </div>
+              </div>
+              <div style="flex: 1;">
+                <span class="badge ${getTierBadgeClass(prioResult.priority_tier)}" style="margin-bottom: 4px;">${prioResult.priority_tier}</span>
+                <p class="text-sm" style="color: var(--text-secondary); margin: 0;">${escapeHtml(prioResult.explanation_text || '')}</p>
+              </div>
+            </div>
+            ${factors.length > 0 ? `
+              <div class="factor-grid">
+                ${factors.map(f => `
+                  <div class="factor-card">
+                    <strong class="factor-name" style="text-transform: none; color: var(--text-primary); font-size: 11px; font-weight: 600; display: block; margin-bottom: 2px;">${escapeHtml(f.name.replace(/_/g, ' '))}</strong>
+                    <span class="factor-val" style="color: var(--prio-high); font-size: 12px; font-weight: 600; display: block;">Contribution: ${(f.contribution >= 0 ? '+' : '') + f.contribution.toFixed(2)}</span>
+                    <span class="text-muted" style="font-size: 11px; display: block;">Weight: ${(f.weight * 100).toFixed(0)}%</span>
+                    <span class="text-muted" style="font-size: 11px; display: block;">Value: ${typeof f.normalized_value === 'number' ? f.normalized_value.toFixed(4) : f.normalized_value}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    } else {
+      prioHtml = '<div class="text-sm text-muted">Prioritization score unavailable: neither the supporting evidence artifacts nor linked activities have been prioritized yet. (Run Stage 6 for Evidence Triage or Stage 7 for Activity Triage).</div>';
+    }
+
+    proofContent.innerHTML = `
+      <div class="proof-container">
+        <!-- Finding Overview -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Finding Overview &amp; Detection Metadata
+            </span>
+          </div>
+          <div class="proof-grid">
+            <div class="proof-item">
+              <span class="proof-item-label">Finding Type</span>
+              <span class="proof-item-value"><span class="badge badge-mono">${formatEnum(finding.finding_type)}</span></span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Detection Severity</span>
+              <span class="proof-item-value font-mono"><strong>${finding.severity.toFixed(2)}</strong> / 1.00</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Rule / Detection ID</span>
+              <span class="proof-item-value font-mono"><strong>${escapeHtml(finding.rule_id || 'None')}</strong></span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">MITRE ATT&amp;CK Mapping</span>
+              <span class="proof-item-value">${finding.mitre_tactic ? `<span class="badge badge-mono">${escapeHtml(finding.mitre_tactic)} / ${escapeHtml(finding.mitre_technique || '')}</span>` : '<span class="text-muted">None specified</span>'}</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-item-label">Detection Timestamp</span>
+              <span class="proof-item-value text-sm">${new Date(finding.created_at).toLocaleString()}</span>
+            </div>
+            <div class="proof-item" style="grid-column: 1 / -1;">
+              <span class="proof-item-label">Finding Description</span>
+              <p class="text-sm" style="color: var(--text-primary); margin-top: 2px;">${escapeHtml(finding.description || '')}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Supporting Evidence -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              Supporting Evidence Traceability (${evError ? 'Query Failed' : evidenceIds.length})
+            </span>
+          </div>
+          <div>${supportingEvidenceHtml}</div>
+        </div>
+
+        <!-- Discovered Correlations & Activities -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Observed Evidence Associations (${corrError ? 'Query Failed' : relatedCorrelations.length})
+            </span>
+          </div>
+          <div>${associationsHtml}</div>
+
+          <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px;">
+              Clustered Activity Memberships (${actError ? 'Query Failed' : relatedActivities.length})
+            </div>
+            <div>${activitiesHtml}</div>
+          </div>
+        </div>
+
+        <!-- Explainable Prioritization Breakdown -->
+        <div class="proof-section">
+          <div class="proof-section-header">
+            <span class="proof-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Operational Prioritization Triage (Supporting Evidence &amp; Activities)
+            </span>
+          </div>
+          <div>${prioHtml}</div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    proofContent.innerHTML = `<div class="alert alert-danger">Error retrieving finding proof: ${escapeHtml(err.message)}</div>`;
+  }
+};
+
+window.jumpToEvidenceRecord = function(sourceId, evidenceId) {
+  const modal = document.getElementById('modal-detail');
+  if (modal) window.closeModal(modal);
+
+  // Switch to Evidence tab
+  const tabBtn = document.getElementById('nav-tab-evidence');
+  if (tabBtn) tabBtn.click();
+
+  const srcFilter = document.getElementById('filter-evidence-source');
+  if (srcFilter) srcFilter.value = sourceId || '';
+  state.evidencePagination.source_id = sourceId || '';
+  state.evidencePagination.offset = 0;
+
+  // Immediately select and inspect the target evidence record
+  if (evidenceId) {
+    selectEvidenceRecord(evidenceId);
+  }
+
+  loadEvidenceRecords().then(() => {
+    if (evidenceId) {
+      scrollSelectedRowIntoView(evidenceId);
+    }
+  });
+
+  const panel = document.getElementById('evidence-records-panel');
+  if (panel) {
+    setTimeout(() => {
+      panel.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
+  }
+};
+
+window.verifySourceIntegrity = async function(sourceId) {
+  const badgeEl = document.getElementById(`verify-badge-${sourceId}`);
+  const btnEl = document.getElementById(`btn-verify-source-${sourceId}`);
+  if (btnEl) btnEl.disabled = true;
+  if (badgeEl) {
+    badgeEl.innerHTML = '<span class="text-xs text-muted">Verifying…</span>';
+  }
+
+  try {
+    const invParam = state.activeInvestigationId ? `?investigation_id=${encodeURIComponent(state.activeInvestigationId)}` : '';
+    const res = await apiRequest(`/evidence/sources/${encodeURIComponent(sourceId)}/verify-integrity${invParam}`, {
+      method: 'POST'
+    });
+
+    state.sourcesIntegrityCache = state.sourcesIntegrityCache || new Map();
+    state.sourcesIntegrityCache.set(sourceId, res);
+
+    let badgeClass = 'badge-mono';
+    let icon = '●';
+    if (res.status === 'VERIFIED') {
+      badgeClass = 'badge-open';
+      icon = '✓';
+    } else if (res.status === 'INTEGRITY_MISMATCH') {
+      badgeClass = 'alert-danger';
+      icon = '⚠';
+    } else {
+      badgeClass = 'alert-warning';
+      icon = '—';
+    }
+
+    if (badgeEl) {
+      badgeEl.innerHTML = `<span class="badge ${badgeClass} text-xs" style="cursor: pointer;" title="Click to view cryptographic verification details" onclick="viewSourceIntegrityModal('${escapeHtml(sourceId)}')">${icon} ${escapeHtml(res.status)}</span>`;
+    }
+
+    showAlert(`[${res.status}] ${res.message}`, res.status === 'VERIFIED' ? 'success' : (res.status === 'INTEGRITY_MISMATCH' ? 'danger' : 'warning'), 5000);
+  } catch (err) {
+    if (badgeEl) {
+      badgeEl.innerHTML = `<span class="badge alert-danger text-xs" title="${escapeHtml(err.message)}">FAILED</span>`;
+    }
+    showAlert(`Integrity check failed: ${err.message}`, 'danger');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
+  }
+};
+
+window.viewSourceIntegrityModal = function(sourceId) {
+  const data = state.sourcesIntegrityCache?.get(sourceId);
+  if (!data) return;
+  const titleEl = document.getElementById('modal-detail-title');
+  const genericContent = document.getElementById('modal-generic-content');
+  const genericPanel = document.getElementById('modal-generic-panel');
+  const explainPanel = document.getElementById('modal-explainability-panel');
+  const provPanel = document.getElementById('modal-provenance-panel');
+  const proofPanel = document.getElementById('modal-finding-proof-panel');
+  const evDetailPanel = document.getElementById('modal-evidence-detail-panel');
+  const tierBadge = document.getElementById('modal-detail-tier-badge');
+
+  if (explainPanel) explainPanel.style.display = 'none';
+  if (provPanel) provPanel.style.display = 'none';
+  if (proofPanel) proofPanel.style.display = 'none';
+  if (evDetailPanel) evDetailPanel.style.display = 'none';
+  if (tierBadge) tierBadge.style.display = 'none';
+
+  if (titleEl) titleEl.textContent = `Evidence Source Integrity: ${data.filename}`;
+  if (genericPanel) genericPanel.style.display = 'block';
+
+  let statusBadgeClass = 'badge-mono';
+  if (data.status === 'VERIFIED') statusBadgeClass = 'badge-open';
+  else if (data.status === 'INTEGRITY_MISMATCH') statusBadgeClass = 'alert-danger';
+  else statusBadgeClass = 'alert-warning';
+
+  if (genericContent) {
+    genericContent.innerHTML = `
+      <div style="padding: 10px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          <span style="font-size: 13px; font-weight: 600;">Verification State</span>
+          <span class="badge ${statusBadgeClass}">${escapeHtml(data.status)}</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 140px 1fr; gap: 8px; font-size: 12px;">
+          <span class="text-muted">Filename:</span>
+          <strong>${escapeHtml(data.filename)}</strong>
+
+          <span class="text-muted">Recorded Ingestion SHA-256:</span>
+          <code class="font-mono text-sm" style="word-break: break-all;">${escapeHtml(data.recorded_sha256)}</code>
+
+          <span class="text-muted">Computed Stored Artifact SHA-256:</span>
+          <code class="font-mono text-sm" style="word-break: break-all;">${escapeHtml(data.computed_sha256 || 'Unavailable')}</code>
+
+          <span class="text-muted">Verified At:</span>
+          <span>${new Date(data.verified_at).toLocaleString()}</span>
+        </div>
+        <div class="alert ${data.status === 'VERIFIED' ? 'alert-info' : 'alert-warning'}" style="margin: 0; font-size: 11px;">
+          ${escapeHtml(data.message)}
+        </div>
+        <div style="font-size: 10px; color: var(--text-muted); line-height: 1.4; border-top: 1px solid var(--border-subtle); padding-top: 8px;">
+          <strong>Forensic Notice:</strong> ${escapeHtml(data.disclaimer)}
+        </div>
+      </div>
+    `;
+  }
+
+  if (window.openModal) window.openModal('modal-detail');
+};
+
+window.copyRawJson = function(btn) {
+  const pre = document.getElementById('raw-json-pre');
+  if (!pre) return;
+  const text = pre.textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }).catch(() => {
+      fallbackCopy(text, btn);
+    });
+  } else {
+    fallbackCopy(text, btn);
+  }
+};
+
+window.copyDigest = function(hash, btn) {
+  if (!hash) return;
+  const doFeedback = () => {
+    if (!btn) return;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span style="color: var(--prio-success); font-size: 11px; font-weight: 700;">✓</span>';
+    setTimeout(() => {
+      btn.innerHTML = origHtml;
+    }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(hash).then(doFeedback).catch(() => fallbackCopy(hash, btn));
+  } else {
+    fallbackCopy(hash, btn);
+  }
+};
+
+function fallbackCopy(text, btn) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand('copy');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  } catch {}
+  document.body.removeChild(textarea);
 }
 
 // Start application when DOM is ready
 document.addEventListener('DOMContentLoaded', initApp);
-

@@ -30,6 +30,7 @@ from app.normalization.mapper import (
     normalize_port,
     normalize_protocol,
     normalize_file_hash,
+    validate_and_parse_file_hash,
     normalize_status,
     normalize_action,
     sanitize_string,
@@ -113,7 +114,9 @@ class NormalizationService:
         file_path = sanitize_string(raw_file_path)
 
         raw_file_hash = extract_field_value(raw_data, mapping.file_hash_fields)
-        file_hash = normalize_file_hash(raw_file_hash)
+        file_hash, hash_metadata = validate_and_parse_file_hash(raw_file_hash)
+        if hash_metadata.get("status") not in ("MISSING", "VALID"):
+            warnings.append(f"Invalid record file hash: {hash_metadata.get('error', 'Malformed hash digest')}")
 
         # Network entities
         raw_ip = extract_field_value(raw_data, mapping.ip_fields)
@@ -147,6 +150,8 @@ class NormalizationService:
             "source_format": raw_record.source_format,
             "_raw_fields": {k: v for k, v in raw_data.items() if v is not None and str(v).strip() != ""},
         }
+        if hash_metadata.get("status") != "MISSING":
+            attributes["hash_metadata"] = hash_metadata
 
         # If timestamp failed, return invalid result
         if errors or normalized_ts is None:

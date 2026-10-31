@@ -276,12 +276,14 @@ class CorrelationService:
             candidate_pairs = []
             
             # Temporal Window
-            sorted_evidence = sorted(evidence_list, key=lambda x: x.timestamp)
+            sorted_evidence = sorted(evidence_list, key=lambda x: (x.timestamp.replace(tzinfo=timezone.utc) if x.timestamp and x.timestamp.tzinfo is None else (x.timestamp or datetime.min.replace(tzinfo=timezone.utc))))
             for i in range(len(sorted_evidence)):
                 e1 = sorted_evidence[i]
                 for j in range(i + 1, len(sorted_evidence)):
                     e2 = sorted_evidence[j]
-                    if abs((e2.timestamp - e1.timestamp).total_seconds()) <= self.temporal_window:
+                    t1 = e1.timestamp.replace(tzinfo=timezone.utc) if e1.timestamp and e1.timestamp.tzinfo is None else e1.timestamp
+                    t2 = e2.timestamp.replace(tzinfo=timezone.utc) if e2.timestamp and e2.timestamp.tzinfo is None else e2.timestamp
+                    if t1 and t2 and abs((t2 - t1).total_seconds()) <= self.temporal_window:
                         p = add_pair(e1, e2)
                         if p: candidate_pairs.append(p)
                     else:
@@ -293,7 +295,9 @@ class CorrelationService:
                     b_len = len(items)
                     for i in range(b_len):
                         for j in range(i + 1, b_len):
-                            if abs((items[j].timestamp - items[i].timestamp).total_seconds()) <= self.max_temporal_distance:
+                            t_i = items[i].timestamp.replace(tzinfo=timezone.utc) if items[i].timestamp and items[i].timestamp.tzinfo is None else items[i].timestamp
+                            t_j = items[j].timestamp.replace(tzinfo=timezone.utc) if items[j].timestamp and items[j].timestamp.tzinfo is None else items[j].timestamp
+                            if t_i and t_j and abs((t_j - t_i).total_seconds()) <= self.max_temporal_distance:
                                 p = add_pair(items[i], items[j])
                                 if p: candidate_pairs.append(p)
 

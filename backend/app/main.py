@@ -1,4 +1,4 @@
-"""FastAPI application entrypoint for ForensiQ (Phase 9A Security Hardened)."""
+"""FastAPI application entrypoint for ForensiQ."""
 
 import re
 import time
@@ -18,18 +18,15 @@ from app.core.logging import get_logger, setup_logging
 logger = get_logger("main")
 
 
-from app.core.dev_reset import reset_development_data
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for clean startup and shutdown."""
     settings = get_settings()
     setup_logging(log_level=settings.LOG_LEVEL)
     logger.info(f"Starting {settings.APP_NAME} in [{settings.APP_ENV}] mode...")
-    
-    # Safely clear development forensic data on startup (constrained by safety guards)
-    reset_development_data()
-    
+    # reset_development_data() is intentionally NOT called here.
+    # The reset utility remains available in dev_reset.py for explicit manual use,
+    # but must never fire automatically on normal application startup.
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
 
@@ -38,7 +35,6 @@ def create_app() -> FastAPI:
     """FastAPI application factory with security headers, CORS, and conditional docs."""
     settings = get_settings()
 
-    # Determine docs URLs based on configuration
     docs_url = "/docs" if settings.ENABLE_API_DOCS else None
     redoc_url = "/redoc" if settings.ENABLE_API_DOCS else None
     openapi_url = "/openapi.json" if settings.ENABLE_API_DOCS else None
@@ -65,7 +61,6 @@ def create_app() -> FastAPI:
     # Request ID and Security Headers Middleware
     @app.middleware("http")
     async def security_and_request_middleware(request: Request, call_next):
-        # Validate incoming client request ID or generate high-entropy server UUID
         client_req_id = request.headers.get("X-Request-ID")
         if client_req_id and len(client_req_id) <= 64 and re.match(r"^[a-zA-Z0-9_-]+$", client_req_id):
             request_id = client_req_id
@@ -79,7 +74,6 @@ def create_app() -> FastAPI:
 
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
-        # Standard Security & Timing Headers
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Process-Time-MS"] = str(duration_ms)
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -95,7 +89,7 @@ def create_app() -> FastAPI:
     # Register API Routers
     app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
 
-    # Conditionally Mount Frontend Static Files (Phase 12 Production Serving)
+    # Conditionally Mount Frontend Static Files
     if settings.SERVE_FRONTEND and settings.STATIC_DIR.exists():
         from fastapi.staticfiles import StaticFiles
         app.mount(
@@ -108,4 +102,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

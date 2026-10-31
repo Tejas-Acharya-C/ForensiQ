@@ -1,0 +1,6 @@
+timestamp,event_type,user,process,ip_address,status,device_id
+2026-03-01T11:00:00Z,PROCESS_LAUNCH,dev_user,python.exe,10.0.0.20,SUCCESS,ws-synth-02
+2026-03-01T11:01:00Z,FILE_ACCESS,dev_user,,10.0.0.20,SUCCESS,ws-synth-02
+2026-03-01T11:02:00Z,NETWORK_CONNECT,dev_user,,10.0.0.1,SUCCESS,ws-synth-02
+2026-03-01T11:03:00Z,SYSTEM_ALERT,system,,10.0.0.20,SUCCESS,ws-synth-02
+

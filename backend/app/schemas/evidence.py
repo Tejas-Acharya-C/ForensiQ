@@ -12,23 +12,23 @@ class EvidenceBase(BaseModel):
     event_type: str = Field(..., max_length=64)
     source_type: str = Field(..., max_length=32)
 
-    user_id: Optional[str] = Field(None, max_length=128)
-    device_id: Optional[str] = Field(None, max_length=128)
-    session_id: Optional[str] = Field(None, max_length=128)
+    user_id: Optional[str] = None
+    device_id: Optional[str] = None
+    session_id: Optional[str] = None
 
     process_id: Optional[int] = None
-    process_name: Optional[str] = Field(None, max_length=255)
-    parent_process_name: Optional[str] = Field(None, max_length=255)
+    process_name: Optional[str] = None
+    parent_process_name: Optional[str] = None
 
     file_path: Optional[str] = None
-    file_hash: Optional[str] = Field(None, max_length=64)
+    file_hash: Optional[str] = None
 
-    ip_address: Optional[str] = Field(None, max_length=45)
+    ip_address: Optional[str] = Field(None, max_length=64)
     port: Optional[int] = Field(None, ge=0, le=65535)
-    protocol: Optional[str] = Field(None, max_length=16)
+    protocol: Optional[str] = Field(None, max_length=32)
 
-    action: Optional[str] = Field(None, max_length=64)
-    status: Optional[str] = Field(None, max_length=32)
+    action: Optional[str] = None
+    status: Optional[str] = None
 
     attributes: Dict[str, Any] = Field(default_factory=dict)
 

@@ -123,6 +123,5 @@ class ConcurrencyGuard:
 
 
 # Global singletons
-login_rate_limiter = InMemoryRateLimiter()
 analysis_rate_limiter = InMemoryRateLimiter()
 analysis_concurrency_guard = ConcurrencyGuard()

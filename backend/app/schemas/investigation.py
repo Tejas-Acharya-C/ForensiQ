@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Literal, List, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from app.schemas.priority import PriorityResultRead
 
 
@@ -12,6 +12,22 @@ class InvestigationBase(BaseModel):
     description: Optional[str] = Field(None, description="Detailed case notes or context")
     case_number: str = Field(..., min_length=1, max_length=64, description="Unique case reference identifier")
     status: Literal["OPEN", "CLOSED", "ARCHIVED"] = Field("OPEN", description="Investigation status")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Investigation title cannot be empty or purely whitespace.")
+        return s
+
+    @field_validator("case_number")
+    @classmethod
+    def validate_case_number(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Case number cannot be empty or purely whitespace.")
+        return s
 
 
 class InvestigationCreate(InvestigationBase):
@@ -26,7 +42,6 @@ class InvestigationUpdate(BaseModel):
 
 class InvestigationRead(InvestigationBase):
     id: uuid.UUID
-    owner_user_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
 
@@ -60,9 +75,9 @@ class FindingTypeCounts(BaseModel):
 
 
 class InvestigationSummaryRead(BaseModel):
-    """Unified Dashboard Aggregation Schema eliminating N+1 requests."""
+    """Unified Dashboard Aggregation Schema."""
     investigation: InvestigationRead
-    owner_email: Optional[str] = None
+    owner_email: Optional[str] = None   # always None without auth; kept for schema compat
     total_sources: int = 0
     total_evidence: int = 0
     total_findings: int = 0
@@ -75,4 +90,3 @@ class InvestigationSummaryRead(BaseModel):
     top_priority_results: List[PriorityResultRead] = Field(default_factory=list)
     sources: List[SourceHealthSummary] = Field(default_factory=list)
     pipeline_status: Dict[str, Any] = Field(default_factory=dict)
-

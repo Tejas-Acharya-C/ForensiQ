@@ -34,6 +34,7 @@ class FindingResponse(FindingBase):
     id: uuid.UUID
     investigation_id: uuid.UUID
     created_at: datetime
+    evidence_ids: List[uuid.UUID] = Field(default_factory=list, description="Supporting evidence IDs")
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -17,7 +17,7 @@ ForensiQ operates as a decoupled, multi-stage analytical engine with a Client-Se
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │                FastAPI Application Server              │
-│       JWT Auth Middleware | Rate Limiting | CORS        │
+│         Rate Limiting | CORS | Security Headers        │
 ├────────────────────────────────────────────────────────┤
 │                   Processing Pipeline                  │
 │ Ingestion ➔ Normalization ➔ Detections ➔ ML Anomaly    │
@@ -40,8 +40,8 @@ Major Project/
 ├── backend/
 │   ├── alembic/                # Database migration scripts & environment
 │   ├── app/
-│   │   ├── api/v1/             # REST endpoints (auth, evidence, detection, reports)
-│   │   ├── core/               # App configuration, security, JWT, rate limiting
+│   │   ├── api/v1/             # REST endpoints (investigations, evidence, detection, reports)
+│   │   ├── core/               # App configuration, security utilities, rate limiting
 │   │   ├── database/           # SQLAlchemy engine initialization & DB sessions
 │   │   ├── ingestion/          # CSV/JSON/JSONL parser and contract engine
 │   │   ├── normalization/      # Canonical field mapping & validation engine
@@ -74,7 +74,7 @@ Major Project/
 
 ForensiQ uses SQLAlchemy 2.0 ORM with 9 primary models:
 
-1. **`User`**: Administrator authentication credentials and roles.
+1. **`User`**: User model (retained for database schema & migration compatibility; unauthenticated runtime).
 2. **`Investigation`**: Top-level case container (`case_number`, `title`, `status`).
 3. **`EvidenceSource`**: File upload metadata (`filename`, `file_type`, `file_hash`, `record_count`).
 4. **`Evidence`**: Normalized canonical forensic evidence item (timestamp, host, user, process, IP, port, action, hash).
@@ -120,21 +120,20 @@ The analytical engine processes evidence in strict, deterministic order:
 
 ---
 
-## 5. Security & Authentication Model
+## 5. Security & Access Model
 
-- **Authentication**: JWT (JSON Web Tokens) signed via HMAC-SHA256.
-- **Password Storage**: Hashed using `bcrypt` (cost factor 12).
-- **Access Control**: All `/api/v1` routes except `/auth/login` and `/health` require `Authorization: Bearer <token>` headers.
-- **Rate Limiting**: Configured in `backend/app/core/rate_limit.py` to prevent brute-force attacks on sensitive endpoints.
+- **Access Mode**: Single-investigator local workstation (authentication removed).
+- **Network Isolation**: Local dev and Docker Compose services explicitly bind to loopback (`127.0.0.1`).
+- **File System Security**: File uploads validated with `validate_file_path` and `sanitize_filename` to prevent directory traversal.
+- **Rate Limiting**: Configured in `backend/app/core/rate_limit.py` to prevent denial-of-service on analytical endpoints.
 
 ---
 
 ## 6. Testing Architecture
 
 - **Framework**: `pytest` + `httpx` (Async test client).
-- **Isolation**: Tests execute using a dedicated SQLite database (`test_forensiq.db`) managed via `backend/tests/conftest.py`.
+- **Isolation**: Tests execute using a dedicated SQLite database (`test_forensiq.db`) managed via `backend/tests/conftest.py`. The live database (`forensiq.db`) is never accessed.
 - **Test Coverage**:
-  - `test_auth_simplified.py`: Authentication & access control.
   - `test_ingestion_normalization.py`: Parser & schema mapper validation.
   - `test_detection_semantics.py`: SIGMA rule engine execution semantics.
   - `test_detection_ml.py`: Isolation forest anomaly detection algorithms.

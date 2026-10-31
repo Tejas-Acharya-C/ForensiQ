@@ -142,15 +142,15 @@ class ActivityService:
             for comp in components:
                 mem = sorted(
                     [evidence_by_id[eid] for eid in comp],
-                    key=lambda e: (e.timestamp, e.id)
+                    key=lambda e: (e.timestamp.replace(tzinfo=timezone.utc) if e.timestamp and e.timestamp.tzinfo is None else (e.timestamp or datetime.min.replace(tzinfo=timezone.utc)), e.id)
                 )
                 if not mem: continue
                 
                 cur_sub = [mem[0].id]
-                start_ts = mem[0].timestamp
+                start_ts = mem[0].timestamp.replace(tzinfo=timezone.utc) if mem[0].timestamp and mem[0].timestamp.tzinfo is None else mem[0].timestamp
                 for i in range(1, len(mem)):
-                    cur_ts = mem[i].timestamp
-                    if abs((cur_ts - start_ts).total_seconds()) > self.max_temporal_span:
+                    cur_ts = mem[i].timestamp.replace(tzinfo=timezone.utc) if mem[i].timestamp and mem[i].timestamp.tzinfo is None else mem[i].timestamp
+                    if cur_ts and start_ts and abs((cur_ts - start_ts).total_seconds()) > self.max_temporal_span:
                         final_groups.append(cur_sub)
                         cur_sub = [mem[i].id]
                         start_ts = cur_ts

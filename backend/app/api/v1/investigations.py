@@ -1,4 +1,4 @@
-"""Investigation management and dashboard aggregation API controller (Phase 9)."""
+"""Investigation management and dashboard aggregation API controller."""
 
 import uuid
 from typing import List, Optional, Dict, Any
@@ -7,10 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
-from app.api.deps import (
-    get_current_user,
-    check_investigation_access,
-)
+from app.api.deps import check_investigation_access
 from app.database.session import get_db
 from app.models.investigation import Investigation
 from app.models.evidence_source import EvidenceSource
@@ -19,7 +16,6 @@ from app.models.finding import Finding
 from app.models.relationship import Relationship
 from app.models.activity import Activity
 from app.models.priority_result import PriorityResult
-from app.models.user import User
 from app.schemas.investigation import (
     InvestigationCreate,
     InvestigationRead,
@@ -41,16 +37,15 @@ router = APIRouter(prefix="/investigations", tags=["Investigations & Dashboard"]
     "",
     response_model=PaginatedResponse[InvestigationRead],
     status_code=status.HTTP_200_OK,
-    summary="List investigations accessible by current user with pagination",
+    summary="List all investigations with pagination",
 )
 def list_investigations(
-    limit: int = Query(50, ge=1, le=500, description="Max records to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status (OPEN, CLOSED, ARCHIVED)"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    status_filter: Optional[str] = Query(None, alias="status"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PaginatedResponse[InvestigationRead]:
-    """List all investigations accessible by the authenticated investigator."""
+    """List all investigations."""
     query = db.query(Investigation)
 
     if status_filter:
@@ -79,9 +74,8 @@ def list_investigations(
 def create_investigation(
     payload: InvestigationCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> InvestigationRead:
-    """Provision a new investigation container assigned to the creating investigator."""
+    """Provision a new investigation container."""
     existing = db.query(Investigation).filter(Investigation.case_number == payload.case_number).first()
     if existing:
         raise ConflictError(f"Investigation with case number '{payload.case_number}' already exists.")
@@ -91,7 +85,7 @@ def create_investigation(
         description=payload.description,
         case_number=payload.case_number,
         status=payload.status,
-        owner_user_id=current_user.id,
+        owner_user_id=None,          # no auth — owner field left NULL
     )
     db.add(inv)
     db.commit()
@@ -109,10 +103,9 @@ def create_investigation(
 def get_investigation_detail(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> InvestigationRead:
-    """Retrieve detailed investigation metadata with anti-IDOR authorization."""
-    inv = check_investigation_access(investigation_id, db, current_user)
+    """Retrieve detailed investigation metadata."""
+    inv = check_investigation_access(investigation_id, db)
     return InvestigationRead.model_validate(inv)
 
 
@@ -126,10 +119,9 @@ def update_investigation(
     investigation_id: uuid.UUID,
     payload: InvestigationUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> InvestigationRead:
     """Update title, description, or status of an investigation."""
-    inv = check_investigation_access(investigation_id, db, current_user)
+    inv = check_investigation_access(investigation_id, db)
 
     if payload.title is not None:
         inv.title = payload.title
@@ -152,12 +144,9 @@ def update_investigation(
 def get_investigation_summary(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> InvestigationSummaryRead:
-    """Compute high-level counts, tier breakdowns, and health status in a single authorized database pass."""
-    inv = check_investigation_access(investigation_id, db, current_user)
-
-    owner_email = inv.owner.email if inv.owner else None
+    """Compute high-level counts, tier breakdowns, and health status."""
+    inv = check_investigation_access(investigation_id, db)
 
     # Total counts via SQL aggregation
     total_sources = db.query(func.count(EvidenceSource.id)).filter(EvidenceSource.investigation_id == investigation_id).scalar() or 0
@@ -215,7 +204,6 @@ def get_investigation_summary(
         .all()
     )
 
-    # Source normalized counts map
     source_norm_counts = dict(
         db.query(Evidence.source_id, func.count(Evidence.id))
         .filter(Evidence.investigation_id == investigation_id)
@@ -252,7 +240,7 @@ def get_investigation_summary(
 
     return InvestigationSummaryRead(
         investigation=InvestigationRead.model_validate(inv),
-        owner_email=owner_email,
+        owner_email=None,           # no auth — always None
         total_sources=total_sources,
         total_evidence=total_evidence,
         total_findings=total_findings,
@@ -272,15 +260,14 @@ def get_investigation_summary(
     "/{investigation_id}/sources",
     response_model=List[SourceHealthSummary],
     status_code=status.HTTP_200_OK,
-    summary="List evidence sources belonging to an investigation (safe provenance without storage_path)",
+    summary="List evidence sources belonging to an investigation",
 )
 def list_investigation_sources(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> List[SourceHealthSummary]:
-    """Retrieve all evidence sources for an investigation, strictly omitting storage_path to preserve security."""
-    check_investigation_access(investigation_id, db, current_user)
+    """Retrieve all evidence sources for an investigation, omitting storage_path."""
+    check_investigation_access(investigation_id, db)
 
     sources_records = (
         db.query(EvidenceSource)

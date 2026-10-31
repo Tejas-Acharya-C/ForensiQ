@@ -1,4 +1,4 @@
-"""Prioritization API controller for ForensiQ Phase 9 (Hardened for Phase 9C)."""
+"""Prioritization API controller."""
 
 import uuid
 from typing import List, Optional, Dict, Any, Literal
@@ -7,23 +7,17 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 
 from app.api.deps import (
-    get_current_user,
     check_investigation_access,
     rate_limit_analysis,
 )
 from app.database.session import get_db
-from app.models.investigation import Investigation
 from app.prioritization import PrioritizationService, PrioritizationSummary
 from app.models.priority_result import PriorityResult
-from app.models.user import User
 from app.schemas.priority import PriorityResultRead
 from app.schemas.pagination import PaginatedResponse
 from app.core.errors import NotFoundError
 
 router = APIRouter(prefix="/prioritization", tags=["Explainable Prioritization"])
-
-
-
 
 
 class PrioritizationResponse(BaseModel):
@@ -49,11 +43,10 @@ class PrioritizationResponse(BaseModel):
 def run_baseline_artifact_prioritization(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     _rate_limit: None = Depends(rate_limit_analysis),
 ) -> PrioritizationResponse:
     """Run operational artifact-level prioritization."""
-    check_investigation_access(investigation_id, db, current_user)
+    check_investigation_access(investigation_id, db)
 
     service = PrioritizationService()
     summary = service.prioritize_artifacts(db=db, investigation_id=investigation_id)
@@ -80,11 +73,10 @@ def run_baseline_artifact_prioritization(
 def run_contextual_activity_prioritization(
     investigation_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     _rate_limit: None = Depends(rate_limit_analysis),
 ) -> PrioritizationResponse:
     """Run operational activity-level prioritization."""
-    check_investigation_access(investigation_id, db, current_user)
+    check_investigation_access(investigation_id, db)
 
     service = PrioritizationService()
     summary = service.prioritize_activities(db=db, investigation_id=investigation_id)
@@ -106,27 +98,28 @@ def run_contextual_activity_prioritization(
     "/results",
     response_model=PaginatedResponse[PriorityResultRead],
     status_code=status.HTTP_200_OK,
-    summary="Query prioritization results with pagination, filtering, and stable sorting",
+    summary="Query prioritization results with pagination and filtering",
 )
 def list_priority_results(
     investigation_id: Optional[uuid.UUID] = Query(None, description="Filter by investigation ID"),
-    method_type: Optional[Literal["BASELINE_INDEPENDENT", "PROPOSED_CONTEXTUAL"]] = Query(None, description="Filter by prioritization method"),
-    target_type: Optional[Literal["ARTIFACT", "ACTIVITY"]] = Query(None, description="Filter by target type"),
-    priority_tier: Optional[Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]] = Query(None, description="Filter by priority tier"),
-    min_score: Optional[float] = Query(None, ge=0.0, le=100.0, description="Filter by minimum priority score"),
-    limit: int = Query(50, ge=1, le=500, description="Max records to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    method_type: Optional[Literal["BASELINE_INDEPENDENT", "PROPOSED_CONTEXTUAL"]] = Query(None),
+    target_type: Optional[Literal["ARTIFACT", "ACTIVITY"]] = Query(None),
+    target_id: Optional[uuid.UUID] = Query(None, description="Filter by target artifact or activity ID"),
+    priority_tier: Optional[Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]] = Query(None),
+    min_score: Optional[float] = Query(None, ge=0.0, le=100.0),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PaginatedResponse[PriorityResultRead]:
-    """Retrieve paginated explainable priority results with authorization-first scoping and stable sorting."""
+    """Retrieve paginated explainable priority results scoped to the requested investigation."""
     query = db.query(PriorityResult)
 
     if investigation_id:
-        check_investigation_access(investigation_id, db, current_user)
+        check_investigation_access(investigation_id, db)
         query = query.filter(PriorityResult.investigation_id == investigation_id)
 
-
+    if target_id:
+        query = query.filter(PriorityResult.target_id == target_id)
     if method_type:
         query = query.filter(PriorityResult.method_type == method_type)
     if target_type:
@@ -177,15 +170,19 @@ def list_priority_results(
 )
 def get_priority_result_detail(
     result_id: uuid.UUID,
+    investigation_id: Optional[uuid.UUID] = Query(None, description="Optional investigation ID to verify investigation containment"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PriorityResultRead:
-    """Retrieve full detail for a single PriorityResult with investigation access verification."""
+    """Retrieve full detail for a single PriorityResult with optional investigation containment check."""
+    if investigation_id:
+        check_investigation_access(investigation_id, db)
+
     result = db.get(PriorityResult, result_id)
-    if not result:
+    if not result or (investigation_id and result.investigation_id != investigation_id):
+        if investigation_id:
+            raise NotFoundError(f"PriorityResult with ID '{result_id}' not found in investigation '{investigation_id}'.")
         raise NotFoundError(f"PriorityResult with ID '{result_id}' not found.")
 
-    check_investigation_access(result.investigation_id, db, current_user)
     return PriorityResultRead(
         id=result.id,
         investigation_id=result.investigation_id,

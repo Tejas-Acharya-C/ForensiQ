@@ -28,6 +28,12 @@ target_metadata = Base.metadata
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
+if settings.DATABASE_URL.startswith("sqlite"):
+    sqlite_file = settings.DATABASE_URL.replace("sqlite:///", "")
+    if sqlite_file and not sqlite_file.startswith(":memory:"):
+        from pathlib import Path
+        Path(sqlite_file).parent.mkdir(parents=True, exist_ok=True)
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""

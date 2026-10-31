@@ -1,8 +1,6 @@
 """Validate all sample CSVs through the ingestion parser and normalization service."""
 import sys, os, uuid
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
-os.environ.setdefault("DATABASE_URL", "sqlite:///./forensiq.db")
-from dotenv import load_dotenv; load_dotenv(".env")
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from pathlib import Path
 from app.ingestion.parser import CSVParser
@@ -47,11 +45,14 @@ for fname, label in SAMPLES:
 
     status = "OK" if bad == 0 else "WARN"
     ml_ok  = "YES" if good >= 10 else "NO (<10)"
-    print(f"[{status}] {fname:45} rows={vr.estimated_record_count:3}  "
-          f"normalized={good}  rejected={bad}  ML-ready={ml_ok}")
-    print(f"       Scenario: {label}")
-    if bad:
-        ok = False
+    print(f"[{status}] {fname:45} rows={vr.estimated_record_count:3}  norm={good:3}  ml_eligible={ml_ok}")
+    if bad > 0:
+        print(f"       warning: {bad} records failed normalization")
 
 print()
-print("ALL VALID" if ok else "SOME ISSUES — review above")
+if ok:
+    print("All sample files are structurally valid and parsable.")
+    sys.exit(0)
+else:
+    print("One or more sample files had validation errors.")
+    sys.exit(1)

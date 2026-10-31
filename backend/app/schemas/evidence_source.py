@@ -32,3 +32,19 @@ class EvidenceSourceRead(EvidenceSourceBase):
     ingested_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SourceIntegrityResult(BaseModel):
+    """Result of verifying stored evidence source file bytes against recorded ingestion digest."""
+    source_id: uuid.UUID
+    investigation_id: uuid.UUID
+    filename: str
+    recorded_sha256: str
+    computed_sha256: str | None = None
+    status: Literal["VERIFIED", "INTEGRITY_MISMATCH", "VERIFICATION_UNAVAILABLE", "MALFORMED_DIGEST"]
+    verified_at: datetime
+    message: str
+    disclaimer: str = (
+        "Cryptographic SHA-256 integrity verification confirms bit-level match against "
+        "the digest recorded at ingestion; it does not claim legal chain of custody or evidence authenticity."
+    )

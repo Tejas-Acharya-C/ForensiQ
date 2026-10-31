@@ -1,0 +1,14 @@
+timestamp,event_type,user,process,ip_address,port,status,device_id
+2026-03-01T10:00:00Z,AUTH_LOGIN,analyst_test,,10.0.0.15,,FAILURE,ws-synth-01
+2026-03-01T10:02:00Z,AUTH_LOGIN,analyst_test,,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:03:00Z,PROCESS_LAUNCH,analyst_test,powershell.exe,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:04:00Z,NETWORK_CONNECT,analyst_test,powershell.exe,198.51.100.10,443,SUCCESS,ws-synth-01
+2026-03-01T10:05:00Z,PROCESS_LAUNCH,analyst_test,svchost.exe,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:06:00Z,FILE_ACCESS,analyst_test,,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:07:00Z,PROCESS_LAUNCH,system,explorer.exe,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:08:00Z,NETWORK_CONNECT,analyst_test,,10.0.0.1,80,SUCCESS,ws-synth-01
+2026-03-01T10:09:00Z,SYSTEM_ALERT,system,,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:10:00Z,AUTH_LOGIN,system,,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:11:00Z,PROCESS_LAUNCH,analyst_test,conhost.exe,10.0.0.15,,SUCCESS,ws-synth-01
+2026-03-01T10:12:00Z,NETWORK_CONNECT,analyst_test,,10.0.0.2,53,SUCCESS,ws-synth-01
+

@@ -1,9 +1,13 @@
+# =============================================================================
+# ForensiQ Git Ignore Policy
+# Strictly prevents committing secrets, runtime databases, local evidence,
+# and transient build or test artifacts.
+# =============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
 # Distribution / packaging
@@ -53,24 +57,32 @@ htmlcov/
 .nox/
 coverage.xml
 *.cover
+*_test_results.json
 
-# Database files (disposable local DBs)
+# Database files & SQLite sidecars
 *.sqlite
 *.sqlite3
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Logs
 *.log
 logs/
 
-# Authoritative runtime evidence storage & staging (Phase 9B/9D)
+# Runtime evidence storage, staging & trial directories
 data/staging/
 data/sources/
+data/dev/
+data/trial/
+data/test_staging/
+data/test_sources/
 backend/data/
 data/scratch/
+scratch/
 uploads/
 
-# Generated Test Outputs & Reports
-*_test_results.json
+# Generated Test Outputs, PDFs & Temporary Files
 *.pdf
-
+*.tmp

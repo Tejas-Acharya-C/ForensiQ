@@ -9,7 +9,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.evidence_source import EvidenceSource
     from app.models.evidence import Evidence
     from app.models.finding import Finding
@@ -39,12 +38,17 @@ class Investigation(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     case_number: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
+
+    # owner_user_id is kept in the ORM to match the existing DB schema.
+    # The users table and FK (ondelete=SET NULL) remain untouched.
+    # Authentication has been removed so this will be NULL on new investigations.
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True).with_variant(PG_UUID(as_uuid=True), "postgresql"),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -58,11 +62,6 @@ class Investigation(Base):
     )
 
     # Relationships
-    owner: Mapped[Optional["User"]] = relationship(
-        "User",
-        back_populates="investigations",
-        lazy="select",
-    )
     evidence_sources: Mapped[List["EvidenceSource"]] = relationship(
         "EvidenceSource",
         back_populates="investigation",

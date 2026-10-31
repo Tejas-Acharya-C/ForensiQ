@@ -19,7 +19,7 @@
         <img class="brand-wordmark-img" src="images/logo_wordmap.png" alt="ForensiQ">
         <div class="brand-divider"></div>
       </div>
-      <div class="case-selector-container" id="case-selector-container" style="display: none;">
+      <div class="case-selector-container" id="case-selector-container">
         <span class="case-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
@@ -43,62 +43,15 @@
       </div>
     </div>
     <div class="header-right">
-      <div id="user-profile-badge" class="user-badge" style="display: none;">
-        <span class="user-icon">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
-        </span>
-        <span id="user-email-display" class="user-email"></span>
-        <span class="dropdown-caret">▼</span>
-        <div class="header-divider"></div>
-        <button id="btn-logout" class="btn btn-ghost btn-sm" title="Log out of session">Logout</button>
-      </div>
     </div>
   </header>
 
   <!-- Main Application Body -->
   <main id="main-content" class="main-container">
-    <!-- Unauthenticated Login View -->
-    <section id="auth-view" class="auth-section auth-light-theme">
-      <div class="auth-background-overlay"></div>
-      <div class="auth-card">
-        <div class="auth-header">
-          <div class="auth-brand">
-            <img src="/images/logo.png" alt="ForensiQ Logo" class="auth-logo">
-          </div>
-          <h2>Investigator Authentication</h2>
-          <div class="auth-accent-line"></div>
-          <p class="auth-subtitle">Enter credentials to access digital forensics environment</p>
-        </div>
-        <form id="login-form" class="auth-form" autocomplete="off">
-          <div class="form-group auth-input-group">
-            <label for="login-email">EMAIL ADDRESS</label>
-            <div class="input-icon-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-              <input type="email" id="login-email" class="form-control auth-control" required placeholder="investigator@example.com">
-            </div>
-          </div>
-          <div class="form-group auth-input-group">
-            <label for="login-password">PASSWORD</label>
-            <div class="input-icon-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              <input type="password" id="login-password" class="form-control auth-control" required placeholder="••••••••••••">
-            </div>
-          </div>
-          <div id="auth-error-alert" class="alert alert-danger" style="display: none;"></div>
-          <button type="submit" id="btn-submit-login" class="btn btn-primary btn-block auth-btn">
-            Authenticate Session
-          </button>
-        </form>
-      </div>
-    </section>
-
-    <!-- Authenticated Dashboard View -->
-    <section id="dashboard-view" class="dashboard-section" style="display: none;">
+    <!-- Dashboard View — shown immediately (no login required) -->
+    <section id="dashboard-view" class="dashboard-section">
       <!-- Global Error / Notice Banner -->
-      <div id="dashboard-alert" class="alert alert-warning" style="display: none;"></div>
+      <div id="dashboard-alert" class="alert alert-warning" style="display: none;" role="alert" aria-live="assertive"></div>
 
       <div id="example-evidence-banner" style="display: none; margin-bottom: 1rem; padding: 0.85rem 1.1rem; background: var(--bg-secondary); border: 1px solid var(--border-active); border-radius: 6px; align-items: center; gap: 1rem; flex-wrap: wrap;">
         <div style="flex: 1; min-width: 200px;">
@@ -140,152 +93,192 @@
             <p id="case-desc-display" class="case-desc">No description provided.</p>
           </div>
           <div class="case-banner-right">
-            <button id="btn-download-report" class="btn btn-secondary btn-sm btn-report" title="Download PDF Investigation Report" style="display: none;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-              Download Report
-            </button>
-            <span id="btn-download-report-spinner" style="display: none; font-size: 0.8rem; color: var(--text-muted);">Generating PDF…</span>
+            <span class="badge badge-mono font-mono" id="case-pipeline-quick-status">READY</span>
           </div>
         </div>
       </div>
 
-      <!-- Pipeline Action Bar -->
-      <div class="pipeline-bar card">
-        <div class="pipeline-header">
-          <div class="pipeline-title">
-            <strong>Pipeline Controls</strong>
-            <span class="text-muted text-sm">— Execute the forensic processing pipeline to analyze and prioritize evidence</span>
-          </div>
-          <div class="pipeline-status-summary" id="pipeline-status-summary">
-            <span class="status-label">Pipeline Status:</span>
-            <span class="badge badge-mono" id="pipeline-state-badge">Ready</span>
-          </div>
-        </div>
-         <div class="pipeline-actions" id="pipeline-actions-container">
-          <button id="btn-action-normalize" class="pipeline-step" title="Normalize Evidence">
-            <span class="step-num">01</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Normalize</span>
-              <span class="step-subtitle">Stage 1</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-detect" class="pipeline-step" title="Run Rules & IOCs">
-            <span class="step-num">02</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Run Detections</span>
-              <span class="step-subtitle">Stage 2</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-ml" class="pipeline-step" title="Run ML Anomaly Analysis">
-            <span class="step-num">03</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Run ML Anomaly</span>
-              <span class="step-subtitle">Stage 3</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-correlate" class="pipeline-step" title="Run Contextual Correlation">
-            <span class="step-num">04</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Correlate</span>
-              <span class="step-subtitle">Stage 4</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-activities" class="pipeline-step" title="Form Investigation Activities">
-            <span class="step-num">05</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Cluster Activities</span>
-              <span class="step-subtitle">Stage 5</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-prioritize-artifact" class="pipeline-step btn-prio" title="Prioritize Evidence">
-            <span class="step-num">06</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Prioritize Evidence</span>
-              <span class="step-subtitle">Stage 6</span>
-            </div>
-          </button>
-          <div class="step-connector"></div>
-
-          <button id="btn-action-prioritize-activity" class="pipeline-step btn-prio" title="Prioritize Activities">
-            <span class="step-num">07</span>
-            <span class="step-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg>
-            </span>
-            <div class="step-details">
-              <span class="step-title">Prioritize Activities</span>
-              <span class="step-subtitle">Stage 7</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- Navigation Tabs -->
+      <!-- Navigation Tabs (4 Primary Destinations) -->
       <nav class="dashboard-nav" aria-label="Investigation Navigation">
-        <button class="nav-tab active" data-tab="tab-overview">
+        <button class="nav-tab active" data-tab="tab-overview" id="nav-tab-overview">
           <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
           Overview
         </button>
-        <button class="nav-tab" data-tab="tab-prioritization">
-          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Prioritization
-        </button>
-        <button class="nav-tab" data-tab="tab-findings">
-          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Findings &amp; Detections
-        </button>
-        <button class="nav-tab" data-tab="tab-ml">
-          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-          ML Anomalies
-        </button>
-        <button class="nav-tab" data-tab="tab-correlations">
-          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Correlations
-        </button>
-        <button class="nav-tab" data-tab="tab-activities">
-          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
-          Activities
-        </button>
-        <button class="nav-tab" data-tab="tab-sources">
+        <button class="nav-tab" data-tab="tab-evidence" id="nav-tab-evidence">
           <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Evidence Sources
+          Evidence
+        </button>
+        <button class="nav-tab" data-tab="tab-analysis" id="nav-tab-analysis">
+          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
+          Analysis &amp; Findings
+        </button>
+        <button class="nav-tab" data-tab="tab-report" id="nav-tab-report">
+          <svg class="nav-tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Report
         </button>
       </nav>
 
-      <!-- TAB 1: OVERVIEW -->
+      <!-- DESTINATION 1: OVERVIEW -->
       <div id="tab-overview" class="tab-pane active">
-        <!-- 1. Investigation Overview Metrics Grid -->
+        <!-- Guided Investigation Workflow Panel -->
+        <div class="card panel workflow-guide-card" id="workflow-guide-panel">
+          <div class="panel-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                <span class="workflow-badge">Guided Investigation</span>
+                <h3 style="margin: 0; font-size: 15px;">5-Step Investigation Workflow</h3>
+              </div>
+              <span class="text-sm text-muted">Complete digital forensics investigation sequence: ingest, analyze, correlate, prioritize, and report</span>
+            </div>
+            <div id="workflow-current-action-container" style="display: flex; align-items: center; gap: 10px;">
+              <span class="text-sm text-muted" id="workflow-step-hint">Step 1 of 5</span>
+              <button id="workflow-action-btn" class="btn btn-primary btn-sm" title="Execute next recommended action in workflow">
+                Select Case
+              </button>
+            </div>
+          </div>
+          <div class="workflow-steps-track" id="workflow-steps-track">
+            <div class="workflow-step" id="wf-step-1" data-step="1">
+              <div class="wf-step-header">
+                <div class="wf-step-num">1</div>
+                <div class="wf-step-title">Create Case</div>
+              </div>
+              <div class="wf-step-desc">Select or initialize active forensic case</div>
+              <div class="wf-step-status" id="wf-status-1">Active</div>
+            </div>
+            <div class="wf-step-connector">→</div>
+            <div class="workflow-step pending" id="wf-step-2" data-step="2">
+              <div class="wf-step-header">
+                <div class="wf-step-num">2</div>
+                <div class="wf-step-title">Upload Evidence</div>
+              </div>
+              <div class="wf-step-desc">Import CSV forensic logs &amp; record SHA-256 file-content digest</div>
+              <div class="wf-step-status" id="wf-status-2">Pending</div>
+            </div>
+            <div class="wf-step-connector">→</div>
+            <div class="workflow-step pending" id="wf-step-3" data-step="3">
+              <div class="wf-step-header">
+                <div class="wf-step-num">3</div>
+                <div class="wf-step-title">Analyze Investigation</div>
+              </div>
+              <div class="wf-step-desc">Execute 7-stage automated triage pipeline</div>
+              <div class="wf-step-status" id="wf-status-3">Pending</div>
+            </div>
+            <div class="wf-step-connector">→</div>
+            <div class="workflow-step pending" id="wf-step-4" data-step="4">
+              <div class="wf-step-header">
+                <div class="wf-step-num">4</div>
+                <div class="wf-step-title">Review Findings</div>
+              </div>
+              <div class="wf-step-desc">Examine threats, anomalies &amp; priority tiers</div>
+              <div class="wf-step-status" id="wf-status-4">Pending</div>
+            </div>
+            <div class="wf-step-connector">→</div>
+            <div class="workflow-step pending" id="wf-step-5" data-step="5">
+              <div class="wf-step-header">
+                <div class="wf-step-num">5</div>
+                <div class="wf-step-title">Download Report</div>
+              </div>
+              <div class="wf-step-desc">Generate executive forensic PDF report</div>
+              <div class="wf-step-status" id="wf-status-5">Pending</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline Coordinator Card -->
+        <div class="card panel pipeline-coordinator-card" style="margin-bottom: 20px;">
+          <div class="panel-header">
+            <div>
+              <h3>Investigation Pipeline Coordinator</h3>
+              <span class="text-sm text-muted">Orchestrate end-to-end evidence ingestion, threat detection, and multi-layer triage</span>
+            </div>
+            <div class="pipeline-status-summary" id="pipeline-status-summary">
+              <span class="status-label">Status:</span>
+              <span class="badge badge-mono" id="pipeline-state-badge" role="status" aria-live="polite">Ready</span>
+            </div>
+          </div>
+          <div class="coordinator-body">
+            <div class="coordinator-controls">
+              <button id="btn-run-full-analysis" class="btn btn-primary" title="Execute all 7 analysis and triage stages in sequence">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Analyze Investigation
+              </button>
+              <details class="advanced-pipeline-details" id="advanced-pipeline-details">
+                <summary class="advanced-pipeline-summary">
+                  <span>Advanced: Run Individual Stage</span>
+                  <span class="advanced-chevron">▼</span>
+                </summary>
+                <div class="manual-stage-selector" style="margin-top: 8px;">
+                  <label for="select-pipeline-stage" class="visually-hidden">Select Individual Stage</label>
+                  <select id="select-pipeline-stage" class="form-control-sm">
+                    <option value="normalize">Stage 1: Prepare Evidence (Normalize)</option>
+                    <option value="detect">Stage 2: Detect Threats (Deterministic Rules &amp; IOCs)</option>
+                    <option value="ml">Stage 3: AI Anomalies (ML Statistical Outliers)</option>
+                    <option value="correlate">Stage 4: Connect Events (Contextual Correlation)</option>
+                    <option value="activities">Stage 5: Group Activities (Activity Threads)</option>
+                    <option value="prioritize-baseline">Stage 6: Rank Evidence (Baseline Prioritization)</option>
+                    <option value="prioritize-contextual">Stage 7: Rank Activities (Contextual Prioritization)</option>
+                  </select>
+                  <button id="btn-run-single-stage" class="btn btn-secondary btn-sm" title="Execute only the selected stage">
+                    Run Selected Stage
+                  </button>
+                </div>
+              </details>
+            </div>
+
+            <!-- Stage Progress Chips -->
+            <div class="stage-chips-container" id="stage-chips-container">
+              <div class="stage-chip chip-idle" id="chip-stage-1" title="Stage 1: Prepare Evidence (Normalize)">
+                <span class="chip-step font-mono">01</span>
+                <span class="chip-label">Prepare Evidence</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-2" title="Stage 2: Detect Threats (Deterministic Rules &amp; IOCs)">
+                <span class="chip-step font-mono">02</span>
+                <span class="chip-label">Detect Threats</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-3" title="Stage 3: AI Anomalies (Machine Learning Outlier Detection)">
+                <span class="chip-step font-mono">03</span>
+                <span class="chip-label">AI Anomalies</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-4" title="Stage 4: Connect Events (Contextual Evidence Correlation)">
+                <span class="chip-step font-mono">04</span>
+                <span class="chip-label">Connect Events</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-5" title="Stage 5: Group Activities (Synthesize Activity Threads)">
+                <span class="chip-step font-mono">05</span>
+                <span class="chip-label">Group Activities</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-6" title="Stage 6: Rank Evidence (Independent Evidence Prioritization)">
+                <span class="chip-step font-mono">06</span>
+                <span class="chip-label">Rank Evidence</span>
+                <span class="chip-indicator">●</span>
+              </div>
+              <div class="stage-chip-divider">→</div>
+              <div class="stage-chip chip-idle" id="chip-stage-7" title="Stage 7: Rank Activities (Contextual Activity Prioritization)">
+                <span class="chip-step font-mono">07</span>
+                <span class="chip-label">Rank Activities</span>
+                <span class="chip-indicator">●</span>
+              </div>
+            </div>
+
+            <!-- Live Status Feedback Banner -->
+            <div id="pipeline-log-banner" class="pipeline-log-banner text-sm text-muted" role="status" aria-live="polite">
+              Pipeline ready. Click "Analyze Investigation" to orchestrate end-to-end evidence processing.
+            </div>
+          </div>
+        </div>
+
+        <!-- Investigation Overview Metrics Grid (4 Core Focus Metrics) -->
         <div class="metrics-grid">
           <div class="metric-card card">
             <div class="metric-card-header">
@@ -300,7 +293,7 @@
 
           <div class="metric-card card">
             <div class="metric-card-header">
-              <span class="metric-label">Total Evidence Records</span>
+              <span class="metric-label">Normalized Events</span>
               <span class="metric-icon-box box-purple">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
               </span>
@@ -311,7 +304,7 @@
 
           <div class="metric-card card highlight-danger">
             <div class="metric-card-header">
-              <span class="metric-label">Total Findings</span>
+              <span class="metric-label">Detected Findings</span>
               <span class="metric-icon-box box-red">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               </span>
@@ -320,43 +313,21 @@
             <span class="metric-foot">Rule, IOC &amp; ML findings</span>
           </div>
 
-          <div class="metric-card card highlight-warning">
-            <div class="metric-card-header">
-              <span class="metric-label">ML Anomalies</span>
-              <span class="metric-icon-box box-orange">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 24.12 24.12 0 0 1 16.2 0 2 2 0 0 1 1.4 1.4 24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 24.12 24.12 0 0 1-16.2 0 2 2 0 0 1-1.4-1.4z"/><path d="M12 9v6"/></svg>
-              </span>
-            </div>
-            <span id="metric-anomalies" class="metric-value">0</span>
-            <span class="metric-foot">Statistical outliers</span>
-          </div>
-
-          <div class="metric-card card highlight-info">
-            <div class="metric-card-header">
-              <span class="metric-label">Correlated Links</span>
-              <span class="metric-icon-box box-blue-light">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              </span>
-            </div>
-            <span id="metric-relationships" class="metric-value">0</span>
-            <span class="metric-foot">Multi-dimensional links</span>
-          </div>
-
           <div class="metric-card card highlight-primary">
             <div class="metric-card-header">
-              <span class="metric-label">Activity Threads</span>
+              <span class="metric-label">Priority Activities</span>
               <span class="metric-icon-box box-teal">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="18" x2="15" y2="18"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/></svg>
               </span>
             </div>
             <span id="metric-activities" class="metric-value">0</span>
-            <span class="metric-foot">Coherent clusters</span>
+            <span class="metric-foot">Synthesized attack threads</span>
           </div>
         </div>
 
         <!-- Tier Breakdown & Top Priority Grid -->
         <div class="dashboard-split-grid">
-          <!-- 2. Prioritization Tier Breakdown -->
+          <!-- Prioritization Tier Breakdown -->
           <div class="card panel">
             <div class="panel-header">
               <h3>Prioritization Tier Distribution</h3>
@@ -391,10 +362,10 @@
             </div>
           </div>
 
-          <!-- 3. Top Priority Artifacts/Activities -->
+          <!-- Top Priority Artifacts/Activities -->
           <div class="card panel">
             <div class="panel-header">
-              <h3>Top Priority Artifacts & Activities</h3>
+              <h3>Top Priority Artifacts &amp; Activities</h3>
               <span class="text-sm text-muted">Ranked by Explainable Priority Score</span>
             </div>
             <div class="table-responsive">
@@ -419,162 +390,167 @@
         </div>
       </div>
 
-      <!-- TAB 2: ALL PRIORITIZATION RESULTS -->
-      <div id="tab-prioritization" class="tab-pane">
+      <!-- DESTINATION 2: EVIDENCE -->
+      <div id="tab-evidence" class="tab-pane">
         <div class="card panel">
           <div class="panel-header">
-            <h3>All Prioritization Results</h3>
-            <div class="filter-controls">
-              <label for="filter-prio-tier" class="visually-hidden">Priority Tier Filter</label>
-              <select id="filter-prio-tier" class="form-control-sm">
-                <option value="">All Tiers</option>
-                <option value="CRITICAL">CRITICAL</option>
-                <option value="HIGH">HIGH</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="LOW">LOW</option>
-                <option value="INFORMATIONAL">INFORMATIONAL</option>
-              </select>
-              <label for="filter-prio-method" class="visually-hidden">Method Filter</label>
-              <select id="filter-prio-method" class="form-control-sm">
-                <option value="">All Methods</option>
-                <option value="BASELINE_INDEPENDENT">Evidence Prioritization</option>
-                <option value="PROPOSED_CONTEXTUAL">Activity Prioritization</option>
-              </select>
+            <div>
+              <h3>Ingested Evidence Sources &amp; File Integrity</h3>
+              <span class="text-sm text-muted">Raw forensic evidence files registered in this investigation with cryptographic SHA-256 digests recorded at ingestion</span>
             </div>
           </div>
           <div class="table-responsive">
             <table class="forensic-table">
               <thead>
                 <tr>
-                  <th>Tier</th>
-                  <th>Score</th>
-                  <th>Method</th>
-                  <th>Target Type</th>
-                  <th>Factor Breakdown</th>
-                  <th>Explanation</th>
-                  <th>Computed At</th>
-                </tr>
-              </thead>
-              <tbody id="all-prio-tbody">
-                <tr>
-                  <td colspan="7" class="text-center text-muted">Select filter or click to load priority results.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 3: DETERMINISTIC FINDINGS -->
-      <div id="tab-findings" class="tab-pane">
-        <div class="card panel">
-          <div class="panel-header">
-            <h3>Findings &amp; Detection Results</h3>
-            <div class="filter-controls">
-              <label for="filter-finding-type" class="visually-hidden">Finding Type Filter</label>
-              <select id="filter-finding-type" class="form-control-sm">
-                <option value="">All Types</option>
-                <option value="RULE_MATCH">Rule Match</option>
-                <option value="IOC_MATCH">IOC Match</option>
-                <option value="ML_ANOMALY">ML Anomaly</option>
-              </select>
-            </div>
-          </div>
-          <div class="table-responsive">
-            <table class="forensic-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Severity</th>
-                  <th>Rule / IOC ID</th>
-                  <th>MITRE Mapping</th>
-                  <th>Description</th>
-                  <th>Timestamp</th>
-                </tr>
-              </thead>
-              <tbody id="findings-tbody">
-                <tr>
-                  <td colspan="6" class="text-center text-muted">No findings to display.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- TAB 4: ML ANOMALY DETECTION -->
-      <div id="tab-ml" class="tab-pane">
-        <div class="card panel">
-          <div class="panel-header">
-            <h3>Machine Learning Statistical Anomalies</h3>
-            <span class="text-sm text-muted">Unsupervised Isolation Forest</span>
-          </div>
-          <div class="table-responsive">
-            <table class="forensic-table">
-              <thead>
-                <tr>
-                  <th>Model ID</th>
-                  <th>Anomaly Score</th>
+                  <th>Filename</th>
+                  <th>Format</th>
+                  <th>SHA-256 Digest (Recorded at Ingestion)</th>
+                  <th>File Size</th>
+                  <th>Total Records</th>
+                  <th>Normalized</th>
                   <th>Status</th>
-                  <th>Diagnostic Features</th>
-                  <th>Description</th>
-                  <th>Detected At</th>
+                  <th>Ingested At</th>
+                  <th>Action</th>
                 </tr>
               </thead>
-              <tbody id="ml-anomalies-tbody">
+              <tbody id="sources-tbody">
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No ML anomalies to display.</td>
+                  <td colspan="9" class="text-center text-muted">No evidence sources ingested yet. Click "+ Import Evidence" to upload a CSV, JSON, or JSONL forensic log.</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
-      </div>
 
-      <!-- TAB 5: MULTI-DIMENSIONAL CORRELATIONS -->
-      <div id="tab-correlations" class="tab-pane">
-        <div class="card panel">
-          <div class="panel-header">
-            <h3>Discovered Evidence Correlations & Linkages</h3>
-            <div class="filter-controls">
-              <label for="filter-rel-type" class="visually-hidden">Relationship Type Filter</label>
-              <select id="filter-rel-type" class="form-control-sm">
-                <option value="">All Relationships</option>
-                <option value="TEMPORAL_PROXIMITY">Temporal Proximity</option>
-                <option value="USER_PIVOT">User Pivot</option>
-                <option value="IP_PIVOT">IP Pivot</option>
-                <option value="PARENT_CHILD_PROCESS">Parent/Child Process</option>
-                <option value="ACTIVITY_MEMBERSHIP">Activity Membership</option>
-              </select>
+        <!-- Master-Detail Layout: Explorer List (~65%) & Inspector (~35%) -->
+        <div class="evidence-master-detail" id="evidence-master-detail">
+          <!-- Left: Normalized Records Explorer Panel -->
+          <div class="card panel evidence-list-pane" id="evidence-records-panel">
+            <div class="panel-header" style="flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3>Normalized Evidence Records Explorer</h3>
+                <span class="text-sm text-muted">Chronological event stream, Common Evidence Schema entities, and source record traceability</span>
+              </div>
+            </div>
+
+            <!-- Filter Toolbar -->
+            <div class="evidence-filter-bar" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 14px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-subtle);">
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <label for="filter-evidence-source" class="filter-label" style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Source File</label>
+                <select id="filter-evidence-source" class="form-control-sm" style="min-width: 170px;">
+                  <option value="">All Evidence Sources</option>
+                </select>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <label for="filter-evidence-event-type" class="filter-label" style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Event Type</label>
+                <select id="filter-evidence-event-type" class="form-control-sm" style="min-width: 150px;">
+                  <option value="">All Event Types</option>
+                  <option value="AUTH_LOGIN">AUTH_LOGIN</option>
+                  <option value="PROCESS_START">PROCESS_START</option>
+                  <option value="NETWORK_CONNECT">NETWORK_CONNECT</option>
+                  <option value="FILE_ACCESS">FILE_ACCESS</option>
+                  <option value="SYSTEM_ALERT">SYSTEM_ALERT</option>
+                </select>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <label for="filter-evidence-user" class="filter-label" style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">User ID</label>
+                <input type="text" id="filter-evidence-user" class="form-control-sm" placeholder="Filter user..." style="min-width: 120px;">
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <label for="filter-evidence-device" class="filter-label" style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Device ID</label>
+                <input type="text" id="filter-evidence-device" class="form-control-sm" placeholder="Filter device..." style="min-width: 120px;">
+              </div>
+
+              <div style="display: flex; gap: 6px; align-items: flex-end; margin-top: 14px;">
+                <button id="btn-filter-evidence" class="btn btn-secondary btn-sm" title="Apply filter to records">
+                  Apply Filters
+                </button>
+                <button id="btn-reset-evidence-filters" class="btn btn-ghost btn-sm" title="Reset all filters">
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-responsive">
+              <table class="forensic-table" id="evidence-records-table">
+                <thead>
+                  <tr>
+                    <th style="min-width: 130px;">Timestamp</th>
+                    <th>Event Type</th>
+                    <th>Source &amp; Record Offset</th>
+                    <th>User / Device</th>
+                    <th>Action / Status</th>
+                    <th>Key Entities</th>
+                    <th style="width: 80px;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="evidence-records-tbody">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">Select an active investigation to browse evidence records.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Bar -->
+            <div class="evidence-pagination-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 12px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label for="evidence-page-size" class="text-muted" style="font-size: 11px;">Show:</label>
+                <select id="evidence-page-size" class="form-control-sm" style="font-size: 11px; padding: 2px 6px;">
+                  <option value="25" selected>25 per page</option>
+                  <option value="50">50 per page</option>
+                  <option value="100">100 per page</option>
+                </select>
+                <span id="evidence-record-summary" class="text-muted" style="font-size: 11px; margin-left: 8px;" role="status" aria-live="polite">Showing 0 records</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button id="btn-evidence-prev" class="btn btn-ghost btn-sm" disabled style="padding: 2px 10px;">&laquo; Previous</button>
+                <span id="evidence-page-info" class="font-mono text-sm" style="color: var(--text-secondary);" role="status" aria-live="polite">Page 1 of 1</span>
+                <button id="btn-evidence-next" class="btn btn-ghost btn-sm" disabled style="padding: 2px 10px;">Next &raquo;</button>
+              </div>
             </div>
           </div>
-          <div class="table-responsive">
-            <table class="forensic-table">
-              <thead>
-                <tr>
-                  <th>Relationship Type</th>
-                  <th>Weight</th>
-                  <th>Source Evidence</th>
-                  <th>Target Evidence</th>
-                  <th>Attributes</th>
-                </tr>
-              </thead>
-              <tbody id="correlations-tbody">
-                <tr>
-                  <td colspan="5" class="text-center text-muted">No evidence correlations discovered yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+
+          <!-- Right: Evidence Detail Inspector Pane (~35%) -->
+          <aside class="card panel evidence-inspector-pane" id="evidence-inspector-pane" aria-label="Evidence Record Inspector">
+            <div class="panel-header" style="padding-bottom: 8px; margin-bottom: 4px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent-technical);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="11" y2="17"/></svg>
+                <h3 style="margin: 0; font-size: 13px;">Evidence Inspector</h3>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span id="inspector-quick-badge" class="badge badge-mono text-xs" style="display: none;"></span>
+                <button type="button" id="btn-close-inspector" class="btn btn-ghost btn-xs" title="Clear selection (Esc)" style="font-size: 16px; line-height: 1; padding: 2px 6px;">&times;</button>
+              </div>
+            </div>
+            <div class="evidence-inspector-content" id="evidence-inspector-content" role="region" aria-live="polite">
+              <div class="inspector-empty-state text-center text-muted" style="padding: 36px 14px;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom: 10px; opacity: 0.5;">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <div style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">No Evidence Selected</div>
+                <div style="font-size: 11px; line-height: 1.4;">Select a record from the stream or navigate using <kbd class="kbd-hint">J</kbd>/<kbd class="kbd-hint">K</kbd> to inspect forensic attributes, Common Evidence Schema mappings, and provenance.</div>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 
-      <!-- TAB 6: ACTIVITY THREADS -->
-      <div id="tab-activities" class="tab-pane">
-        <div class="card panel">
+      <!-- DESTINATION 3: ANALYSIS & FINDINGS -->
+      <div id="tab-analysis" class="tab-pane">
+        <!-- Section 1: Clustered Activity Threads (Attack Narrative) -->
+        <div class="card panel" style="margin-bottom: 20px;">
           <div class="panel-header">
-            <h3>Clustered Evidence Activity Threads</h3>
-            <span class="text-sm text-muted">Graph-Clustered Contextual Forensic Threads</span>
+            <div>
+              <h3>Clustered Activity Threads (Attack Narrative)</h3>
+              <span class="text-sm text-muted">Synthesized multi-event attack threads clustered from correlated evidence and detection findings</span>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="forensic-table">
@@ -592,40 +568,200 @@
               </thead>
               <tbody id="activities-tbody">
                 <tr>
-                  <td colspan="7" class="text-center text-muted">No activity threads clustered yet.</td>
+                  <td colspan="8" class="text-center text-muted">No activity threads clustered yet. Run the pipeline to synthesize activities.</td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
-      </div>
 
-      <!-- TAB 7: EVIDENCE SOURCES & INGESTION STATUS -->
-      <div id="tab-sources" class="tab-pane">
-        <div class="card panel">
+        <!-- Section 2: Detected Findings & Forensic Findings -->
+        <div class="card panel" style="margin-bottom: 20px;">
           <div class="panel-header">
-            <h3>Ingested Evidence Sources & Provenance</h3>
+            <div>
+              <h3>Detected Findings &amp; Forensic Traceability</h3>
+              <span class="text-sm text-muted">Deterministic rule detections, IOC matches, and behavioral anomalies with MITRE ATT&amp;CK mappings</span>
+            </div>
+            <div class="filter-controls">
+              <label for="filter-finding-type" class="visually-hidden">Finding Type Filter</label>
+              <select id="filter-finding-type" class="form-control-sm">
+                <option value="">All Finding Types</option>
+                <option value="RULE_MATCH">Rule Match</option>
+                <option value="IOC_MATCH">IOC Match</option>
+                <option value="ML_ANOMALY">ML Anomaly</option>
+              </select>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="forensic-table">
               <thead>
                 <tr>
-                  <th>Filename</th>
-                  <th>Format</th>
-                  <th>SHA-256 Hash</th>
-                  <th>File Size</th>
-                  <th>Total Records</th>
-                  <th>Normalized</th>
-                  <th>Status</th>
-                  <th>Ingested At</th>
+                  <th>Type</th>
+                  <th>Severity</th>
+                  <th>Rule / IOC ID</th>
+                  <th>MITRE Mapping</th>
+                  <th>Description</th>
+                  <th>Timestamp</th>
+                  <th style="width: 110px;">Proof &amp; Actions</th>
                 </tr>
               </thead>
-              <tbody id="sources-tbody">
+              <tbody id="findings-tbody">
                 <tr>
-                  <td colspan="8" class="text-center text-muted">No evidence sources ingested yet.</td>
+                  <td colspan="7" class="text-center text-muted">No findings to display. Run detections to evaluate evidence against detection rules.</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Section 3: Advanced Technical Forensics (Collapsible Details) -->
+        <details class="advanced-pipeline-details" id="advanced-analysis-details" style="margin-bottom: 20px;">
+          <summary class="advanced-pipeline-summary">
+            <span>Advanced: Evidence Correlations &amp; Priority Scores</span>
+            <span class="advanced-chevron">▼</span>
+          </summary>
+
+          <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 20px;">
+            <!-- Correlations Card -->
+            <div class="card panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Discovered Evidence Correlations &amp; Linkages</h3>
+                  <span class="text-sm text-muted">Multi-dimensional graph relationships discovered across evidence records</span>
+                </div>
+                <div class="filter-controls">
+                  <label for="filter-rel-type" class="visually-hidden">Relationship Type Filter</label>
+                  <select id="filter-rel-type" class="form-control-sm">
+                    <option value="">All Relationships</option>
+                    <option value="TEMPORAL_PROXIMITY">Temporal Proximity</option>
+                    <option value="USER_PIVOT">User Pivot</option>
+                    <option value="IP_PIVOT">IP Pivot</option>
+                    <option value="PARENT_CHILD_PROCESS">Parent/Child Process</option>
+                    <option value="ACTIVITY_MEMBERSHIP">Activity Membership</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="forensic-table">
+                  <thead>
+                    <tr>
+                      <th>Relationship Type</th>
+                      <th>Weight</th>
+                      <th>Source Evidence</th>
+                      <th>Target Evidence</th>
+                      <th>Attributes</th>
+                    </tr>
+                  </thead>
+                  <tbody id="correlations-tbody">
+                    <tr>
+                      <td colspan="5" class="text-center text-muted">No evidence correlations discovered yet.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Prioritization Results Card -->
+            <div class="card panel">
+              <div class="panel-header">
+                <div>
+                  <h3>All Prioritization Results</h3>
+                  <span class="text-sm text-muted">Dual-level triage scores for evidence artifacts and synthesized activities</span>
+                </div>
+                <div class="filter-controls">
+                  <label for="filter-prio-tier" class="visually-hidden">Priority Tier Filter</label>
+                  <select id="filter-prio-tier" class="form-control-sm">
+                    <option value="">All Tiers</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="LOW">LOW</option>
+                    <option value="INFORMATIONAL">INFORMATIONAL</option>
+                  </select>
+                  <label for="filter-prio-method" class="visually-hidden">Method Filter</label>
+                  <select id="filter-prio-method" class="form-control-sm">
+                    <option value="">All Methods</option>
+                    <option value="BASELINE_INDEPENDENT">Evidence Prioritization</option>
+                    <option value="PROPOSED_CONTEXTUAL">Activity Prioritization</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="forensic-table">
+                  <thead>
+                    <tr>
+                      <th>Tier</th>
+                      <th>Score</th>
+                      <th>Method</th>
+                      <th>Target Type</th>
+                      <th>Factor Breakdown</th>
+                      <th>Explanation</th>
+                      <th>Computed At</th>
+                    </tr>
+                  </thead>
+                  <tbody id="all-prio-tbody">
+                    <tr>
+                      <td colspan="7" class="text-center text-muted">Select filter or run prioritization to view results.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- DESTINATION 4: REPORT -->
+      <div id="tab-report" class="tab-pane">
+        <!-- Executive Report Export Panel -->
+        <div class="card panel report-export-panel" style="margin-bottom: 20px;">
+          <div class="panel-header">
+            <div>
+              <h3>Executive Forensic Investigation Report</h3>
+              <span class="text-sm text-muted">Compile findings, evidence provenance, and activity triage into an official executive PDF report</span>
+            </div>
+            <div>
+              <button id="btn-findings-download-report" class="btn btn-primary btn-sm btn-report" title="Generate and Download PDF Investigation Report">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download Executive Report (PDF)
+              </button>
+              <span id="btn-findings-download-report-spinner" style="display: none; font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;" role="status" aria-live="polite">Generating PDF…</span>
+            </div>
+          </div>
+          <div class="report-export-body" style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-top: 10px;">
+            Generates an automated analytical triage summary PDF including investigation metadata, cryptographic SHA-256 digests recorded at ingestion, detection rule matches, ML statistical outliers, and prioritized investigative items. Cryptographic SHA-256 digests record raw file-content integrity at ingestion time; this report is an automated analytical summary and does not contain an X.509 digital signature or formal legal chain-of-custody certification.
+          </div>
+        </div>
+
+        <!-- Investigation Report Preview & Evidence Integrity Summary -->
+        <div class="card panel">
+          <div class="panel-header">
+            <div>
+              <h3>Report Audit &amp; Evidence Integrity Summary</h3>
+              <span class="text-sm text-muted">Live overview of data items included in the generated forensic report</span>
+            </div>
+          </div>
+          <div style="padding: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+            <div class="report-preview-stat" style="background: var(--bg-secondary); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Active Investigation</div>
+              <div id="report-preview-case" class="font-mono" style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px;">--</div>
+            </div>
+            <div class="report-preview-stat" style="background: var(--bg-secondary); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Evidence Files</div>
+              <div id="report-preview-sources" class="font-mono" style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px;">0 files</div>
+            </div>
+            <div class="report-preview-stat" style="background: var(--bg-secondary); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Detected Findings</div>
+              <div id="report-preview-threats" class="font-mono" style="font-size: 14px; font-weight: 600; color: var(--accent-danger); margin-top: 4px;">0 findings</div>
+            </div>
+            <div class="report-preview-stat" style="background: var(--bg-secondary); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Priority Activities</div>
+              <div id="report-preview-activities" class="font-mono" style="font-size: 14px; font-weight: 600; color: var(--accent-primary); margin-top: 4px;">0 threads</div>
+            </div>
           </div>
         </div>
       </div>
@@ -714,7 +850,7 @@
             <div class="form-group">
               <label for="import-file">Select evidence file</label>
               <input type="file" id="import-file" class="form-control" required accept=".csv,.json,.jsonl,.log,.txt">
-              <span class="text-sm text-muted">A SHA-256 hash is calculated on upload to preserve chain-of-custody.</span>
+              <span class="text-sm text-muted">A cryptographic SHA-256 digest is calculated upon upload to record raw file-content integrity.</span>
             </div>
             <div class="form-group checkbox-group">
               <label>
@@ -743,6 +879,16 @@
           <button class="modal-close" data-close="modal-detail" aria-label="Close modal">&times;</button>
         </div>
         <div class="modal-body">
+          <!-- Finding Proof Inspection Panel -->
+          <div id="modal-finding-proof-panel" class="finding-proof-panel" style="display: none;">
+            <div id="modal-finding-proof-content"></div>
+          </div>
+
+          <!-- Evidence Record Detail Inspection Panel -->
+          <div id="modal-evidence-detail-panel" class="evidence-detail-panel" style="display: none;">
+            <div id="modal-evidence-detail-content"></div>
+          </div>
+
           <!-- Structured Explainability Breakdown Card -->
           <div id="modal-explainability-panel" class="explainability-panel card" style="display: none;">
             <div class="score-breakdown-header">
@@ -763,7 +909,7 @@
 
           <!-- Provenance Traceability Breadcrumb Card -->
           <div id="modal-provenance-panel" class="provenance-panel card" style="display: none;">
-            <div class="panel-subtitle">Forensic Chain of Custody & Provenance</div>
+            <div class="panel-subtitle">Evidence Integrity &amp; Provenance Traceability</div>
             <div class="provenance-chain" id="modal-provenance-chain"></div>
           </div>
 

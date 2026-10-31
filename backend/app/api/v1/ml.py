@@ -6,13 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import (
-    get_current_user,
     check_source_access,
     rate_limit_analysis,
 )
 from app.database.session import get_db
 from app.detection import MLAnomalyService, DetectionSummary
-from app.models.user import User
 
 router = APIRouter(prefix="/ml", tags=["ML Anomaly Detection"])
 
@@ -30,11 +28,10 @@ def analyze_source_ml(
     background_tasks: BackgroundTasks,
     payload: Optional[MLAnalysisRequest] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     _rate_limit: None = Depends(rate_limit_analysis),
 ) -> Any:
-    """Run ML anomaly detection over all normalized evidence records with authorization and rate limiting."""
-    check_source_access(source_id, db, current_user)
+    """Run ML anomaly detection over all normalized evidence records with rate limiting."""
+    check_source_access(source_id, db)
 
     service = MLAnomalyService()
     summary: DetectionSummary = service.analyze_source(

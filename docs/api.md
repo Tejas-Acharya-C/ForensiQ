@@ -1,6 +1,6 @@
-# ForensiQ REST API Specification
+# ForensiQ REST API Reference
 
-This document details the REST API endpoints available in ForensiQ (`/api/v1`). All endpoints return JSON unless specified otherwise.
+All endpoints are under `/api/v1`. No authentication is required (local single-investigator mode). Endpoints return JSON unless stated otherwise.
 
 ---
 
@@ -9,126 +9,159 @@ This document details the REST API endpoints available in ForensiQ (`/api/v1`). 
 http://localhost:8000/api/v1
 ```
 
-## Authentication & Headers
-Except for `/auth/login` and `/health`, all endpoints require JWT authentication passed in the request header:
-```http
-Authorization: Bearer <your_jwt_access_token>
+---
+
+## 1. Health
+
+### `GET /health`
+Application, database, and storage health check.
+
+**Response (`200 OK`):**
+```json
+{ "status": "healthy", "app_name": "ForensiQ", "environment": "development",
+  "database_status": "connected", "storage_status": "healthy", "version": "0.1.0" }
 ```
 
 ---
 
-## 1. Authentication (`/auth`)
-
-### `POST /auth/login`
-Authenticates a user and returns a JWT access token.
-- **Request Body** (`application/x-www-form-urlencoded` or JSON):
-  ```json
-  {
-    "username": "admin@forensiq.local",
-    "password": "YourSecurePassword"
-  }
-  ```
-- **Response** (`200 OK`):
-  ```json
-  {
-    "access_token": "eyJhbGciOiJIUzI1Ni...",
-    "token_type": "bearer"
-  }
-  ```
-
----
-
-## 2. Cases & Investigations (`/investigations`)
+## 2. Investigations (`/investigations`)
 
 ### `GET /investigations`
-Lists all active investigation cases for the authenticated user.
-- **Response** (`200 OK`):
-  ```json
-  [
-    {
-      "id": "c1f7a29e-...",
-      "case_number": "CASE-2026-001",
-      "title": "Insider Data Exfiltration",
-      "description": "Investigating suspicious PowerShell & C2 network traffic",
-      "status": "OPEN",
-      "created_at": "2026-09-02T12:00:00Z"
-    }
-  ]
-  ```
+List all investigations with optional `?status=OPEN|CLOSED|ARCHIVED` filter.
 
 ### `POST /investigations`
-Creates a new investigation case.
-- **Request Body**:
-  ```json
-  {
-    "case_number": "CASE-2026-002",
-    "title": "Ransomware Execution Investigation",
-    "description": "Suspicious Mimikatz and LSASS dump detected",
-    "status": "OPEN"
-  }
-  ```
-- **Response** (`201 Created`)
+Create a new investigation.
+```json
+{ "title": "Insider Threat Triage", "case_number": "CASE-2026-001",
+  "description": "...", "status": "OPEN" }
+```
+**Response: `201 Created`**
+
+### `GET /investigations/{id}`
+Retrieve investigation detail.
+
+### `PATCH /investigations/{id}`
+Update title, description, or status.
+
+### `GET /investigations/{id}/summary`
+Unified dashboard aggregation (counts, tier breakdown, top priorities, sources).
+
+### `GET /investigations/{id}/sources`
+List evidence sources for the investigation.
+
+### `GET /investigations/{id}/report`
+Generate and download a PDF report.
+**Response: `200 OK`, `Content-Type: application/pdf`**
 
 ---
 
-## 3. Evidence Ingestion & Normalization (`/evidence`)
+## 3. Evidence Ingestion (`/evidence`)
 
-### `POST /evidence/upload`
-Uploads a raw forensic evidence file (`.csv`, `.json`, `.jsonl`) attached to an investigation.
-- **Content-Type**: `multipart/form-data`
-- **Form Data**:
-  - `investigation_id`: `<uuid>`
-  - `file`: `<binary_file_data>`
-- **Response** (`201 Created`): Returns `EvidenceSource` metadata object.
+### `POST /evidence/import`
+Upload a raw evidence file (`multipart/form-data`).
+- `investigation_id` (form field, UUID)
+- `file` (form file, CSV / JSON / JSONL)
+- `allow_duplicates` (form field, bool, default false)
+
+**Response: `201 Created`**
+```json
+{ "source_id": "...", "sha256_hash": "...", "total_records": 16, "ingestion_status": "COMPLETED" }
+```
 
 ### `POST /evidence/sources/{source_id}/normalize`
-Executes canonical field mapping and timestamp normalization on uploaded raw logs.
-- **Response** (`200 OK`): Returns normalized count and status.
+Normalize raw records into the Common Evidence Schema.
+**Response: `200 OK`** — includes `normalized_records`, `rejected_records`, `warning_count`, `errors`.
+
+### `GET /evidence`
+Query normalized evidence records. Filters: `?investigation_id=`, `source_id=`, `event_type=`, `user_id=`, `device_id=`, `limit=`, `offset=`.
+
+### `GET /evidence/{evidence_id}`
+Retrieve a single evidence record.
 
 ---
 
-## 4. Detection Engine (`/detection` & `/ml`)
+## 4. Deterministic Detection (`/detection`)
 
-### `POST /detection/investigations/{investigation_id}/run`
-Executes SIGMA/YARA-style deterministic rule matching and IP/Hash IOC checks.
-- **Response** (`200 OK`):
-  ```json
-  {
-    "findings_generated": 4,
-    "rules_matched": ["PROC-001", "PROC-002", "IOC-IP-001"]
-  }
-  ```
+### `POST /detection/sources/{source_id}/analyze-rules`
+Run YAML detection rules and IOC matching over normalized evidence.
+**Response:** `findings_created`, `findings_reused`, `evidence_evaluated`, `rules_evaluated`.
 
-### `POST /ml/investigations/{investigation_id}/run-anomaly`
-Runs unsupervised Isolation Forest anomaly detection on log behavior (requires $\ge 10$ records).
-- **Response** (`200 OK`)
+### `GET /detection/findings`
+Query findings. Filters: `?investigation_id=`, `finding_type=RULE_MATCH|IOC_MATCH|ML_ANOMALY`, `min_severity=`, `limit=`, `offset=`.
+
+### `GET /detection/findings/{finding_id}`
+Retrieve a single finding.
 
 ---
 
-## 5. Correlation & Activity Clustering (`/correlation` & `/activities`)
+## 5. ML Anomaly Detection (`/ml`)
 
-### `POST /correlation/investigations/{investigation_id}/correlate`
-Discovers multi-dimensional evidence relationships across IP, Host, User, and Process fields.
-- **Response** (`200 OK`)
-
-### `POST /activities/investigations/{investigation_id}/cluster`
-Assembles correlated relational graph edges into chronological attack activity threads.
-- **Response** (`200 OK`)
+### `POST /ml/sources/{source_id}/analyze`
+Run Isolation Forest anomaly detection (requires ≥ 10 normalized records).
+**Response:** `findings_created`, `evidence_evaluated`, `status`.
 
 ---
 
-## 6. Risk Prioritization (`/prioritization`)
+## 6. Correlation (`/correlation`)
 
-### `POST /prioritization/investigations/{investigation_id}/prioritize-evidence`
-Calculates risk scores ($0 - 100$) for individual evidence items.
+### `POST /correlation/sources/{source_id}/analyze`
+Discover multi-dimensional evidence relationships.
+**Response:** `relationships_created`, `evidence_evaluated`, `strategy_counts`.
 
-### `POST /prioritization/investigations/{investigation_id}/prioritize-activities`
-Calculates risk scores for grouped activity chains.
+### `GET /correlation/relationships`
+Query relationships. Filters: `?investigation_id=`, `relationship_type=`, `min_weight=`, `sort_by=weight|id`, `order=asc|desc`, `limit=`, `offset=`.
+
+### `GET /correlation/relationships/{relationship_id}`
+Retrieve a single relationship with full `context_attributes`.
 
 ---
 
-## 7. Executive Report Export (`/report`)
+## 7. Activities (`/activities`)
 
-### `GET /report/investigations/{investigation_id}/export-pdf`
-Generates and downloads a formatted PDF executive triage report.
-- **Response**: `200 OK` with `Content-Type: application/pdf` binary stream.
+### `POST /activities/sources/{source_id}/form`
+Cluster correlated evidence into activity threads.
+**Response:** `activities_created`, `activities_reused`.
+
+### `GET /activities`
+Query activities. Filters: `?investigation_id=`, `activity_type=`, `status=`, `limit=`, `offset=`.
+
+### `GET /activities/{activity_id}`
+Retrieve a single activity with `evidence_ids` and `finding_ids`.
+
+---
+
+## 8. Prioritization (`/prioritization`)
+
+### `POST /prioritization/investigations/{id}/baseline`
+Score individual evidence artifacts (BASELINE_INDEPENDENT, 0–100).
+
+### `POST /prioritization/investigations/{id}/contextual`
+Score activity clusters (PROPOSED_CONTEXTUAL, 0–100).
+
+### `GET /prioritization/results`
+Query priority results. Filters: `?investigation_id=`, `method_type=`, `target_type=`, `priority_tier=`, `min_score=`, `limit=`, `offset=`.
+
+### `GET /prioritization/results/{result_id}`
+Retrieve a single priority result with full `factor_breakdown`.
+
+---
+
+## 9. Sample Evidence (`/examples`)
+
+### `GET /examples`
+List available sample evidence files (no authentication required).
+
+### `GET /examples/{filename}`
+Download a sample evidence CSV (no authentication required).
+
+---
+
+## Priority Tiers
+
+| Score range | Tier |
+|---|---|
+| 80–100 | CRITICAL |
+| 60–79 | HIGH |
+| 40–59 | MEDIUM |
+| 20–39 | LOW |
+| 0–19 | INFORMATIONAL |

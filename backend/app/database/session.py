@@ -28,6 +28,13 @@ def create_db_engine() -> Engine:
     settings = get_settings()
     is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
+    if is_sqlite:
+        # Ensure SQLite target directory exists
+        sqlite_file_str = settings.DATABASE_URL.replace("sqlite:///", "")
+        if sqlite_file_str and not sqlite_file_str.startswith(":memory:"):
+            from pathlib import Path
+            Path(sqlite_file_str).parent.mkdir(parents=True, exist_ok=True)
+
     connect_args = {"check_same_thread": False} if is_sqlite else {}
 
     return create_engine(

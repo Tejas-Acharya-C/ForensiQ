@@ -1,4 +1,4 @@
-"""Investigation Activity API controller for ForensiQ Phase 8 (Hardened for Phase 9C)."""
+"""Investigation Activity API controller."""
 
 import uuid
 from typing import List, Optional, Dict, Any
@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session, selectinload
 from pydantic import BaseModel, Field
 from app.api.deps import (
-    get_current_user,
     check_investigation_access,
     check_source_access,
     rate_limit_analysis,
@@ -14,16 +13,11 @@ from app.api.deps import (
 from app.database.session import get_db
 from app.activities import ActivityService, ActivityFormationSummary
 from app.models.activity import Activity
-from app.models.investigation import Investigation
-from app.models.user import User
 from app.schemas.activity import ActivityRead
 from app.schemas.pagination import PaginatedResponse
 from app.core.errors import NotFoundError
 
 router = APIRouter(prefix="/activities", tags=["Investigation Activities"])
-
-
-
 
 
 class ActivityFormationResponse(BaseModel):
@@ -48,11 +42,10 @@ class ActivityFormationResponse(BaseModel):
 def form_activities(
     source_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     _rate_limit: None = Depends(rate_limit_analysis),
 ) -> ActivityFormationResponse:
-    """Cluster contextual evidence relationships into investigation activities with explainability metadata."""
-    check_source_access(source_id, db, current_user)
+    """Cluster contextual evidence relationships into investigation activities."""
+    check_source_access(source_id, db)
 
     service = ActivityService()
     summary: ActivityFormationSummary = service.form_activities_for_source(db=db, source_id=source_id)
@@ -74,27 +67,22 @@ def form_activities(
     "",
     response_model=PaginatedResponse[ActivityRead],
     status_code=status.HTTP_200_OK,
-    summary="Query investigation activities with pagination, filtering, and N+1 query elimination",
+    summary="Query investigation activities with pagination and filtering",
 )
 def list_activities(
     investigation_id: Optional[uuid.UUID] = Query(None, description="Filter by investigation ID"),
     activity_type: Optional[str] = Query(None, description="Filter by activity type"),
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by activity status (NEW, REVIEWING, REVIEWED, DISMISSED)"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter by activity status"),
     limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PaginatedResponse[ActivityRead]:
-    """Retrieve paginated activities with eager-loaded evidence/finding relationships to eliminate N+1 queries."""
+    """Retrieve paginated activities scoped to the requested investigation."""
     query = db.query(Activity)
 
     if investigation_id:
-        check_investigation_access(investigation_id, db, current_user)
+        check_investigation_access(investigation_id, db)
         query = query.filter(Activity.investigation_id == investigation_id)
-    else:
-        query = query.join(Investigation, Activity.investigation_id == Investigation.id).filter(
-            (Investigation.owner_user_id == current_user.id) | (Investigation.owner_user_id.is_(None))
-        )
 
     if activity_type:
         query = query.filter(Activity.activity_type == activity_type)
@@ -103,7 +91,6 @@ def list_activities(
 
     total = query.count()
 
-    # N+1 Elimination: eager load evidence_items and findings using selectinload
     records = (
         query.options(
             selectinload(Activity.evidence_items),
@@ -151,10 +138,13 @@ def list_activities(
 )
 def get_activity_detail(
     activity_id: uuid.UUID,
+    investigation_id: Optional[uuid.UUID] = Query(None, description="Optional investigation ID to verify investigation containment"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> ActivityRead:
-    """Retrieve full activity detail with eager loading and investigation scope check."""
+    """Retrieve full activity detail with eager loading and optional investigation containment check."""
+    if investigation_id:
+        check_investigation_access(investigation_id, db)
+
     act = (
         db.query(Activity)
         .options(
@@ -164,10 +154,11 @@ def get_activity_detail(
         .filter(Activity.id == activity_id)
         .first()
     )
-    if not act:
+    if not act or (investigation_id and act.investigation_id != investigation_id):
+        if investigation_id:
+            raise NotFoundError(f"Activity with ID '{activity_id}' not found in investigation '{investigation_id}'.")
         raise NotFoundError(f"Activity with ID '{activity_id}' not found.")
 
-    check_investigation_access(act.investigation_id, db, current_user)
     return ActivityRead(
         id=act.id,
         investigation_id=act.investigation_id,

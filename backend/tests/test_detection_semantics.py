@@ -21,18 +21,16 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(autouse=True)
 def reset_rate_limiters():
-    from app.core.rate_limit import analysis_rate_limiter, login_rate_limiter
+    from app.core.rate_limit import analysis_rate_limiter
     analysis_rate_limiter.reset()
-    login_rate_limiter.reset()
     yield
 
 
-def _setup(client, headers, csv_bytes: bytes):
+def _setup(client, csv_bytes: bytes):
     """Create a fresh investigation, import, and normalize the given CSV bytes."""
     r = client.post(
         "/api/v1/investigations",
         json={"title": "SemTest", "case_number": f"SEM-{uuid.uuid4().hex[:6]}"},
-        headers=headers,
     )
     assert r.status_code == 201, r.text
     inv_id = r.json()["id"]
@@ -41,33 +39,23 @@ def _setup(client, headers, csv_bytes: bytes):
         "/api/v1/evidence/import",
         data={"investigation_id": inv_id},
         files={"file": ("test.csv", io.BytesIO(csv_bytes), "text/csv")},
-        headers=headers,
     )
     assert r2.status_code in (200, 201), r2.text
     source_id = r2.json()["source_id"]
 
-    r3 = client.post(
-        f"/api/v1/evidence/sources/{source_id}/normalize",
-        headers=headers,
-    )
+    r3 = client.post(f"/api/v1/evidence/sources/{source_id}/normalize")
     assert r3.status_code == 200, r3.text
     return inv_id, source_id
 
 
-def _run_detection(client, headers, source_id):
-    r = client.post(
-        f"/api/v1/detection/sources/{source_id}/analyze-rules",
-        headers=headers,
-    )
+def _run_detection(client, source_id):
+    r = client.post(f"/api/v1/detection/sources/{source_id}/analyze-rules")
     assert r.status_code == 200, r.text
     return r.json()
 
 
-def _findings(client, headers, inv_id):
-    r = client.get(
-        f"/api/v1/detection/findings?investigation_id={inv_id}&limit=100",
-        headers=headers,
-    )
+def _findings(client, inv_id):
+    r = client.get(f"/api/v1/detection/findings?investigation_id={inv_id}&limit=100")
     assert r.status_code == 200, r.text
     return r.json()["items"]
 
@@ -77,60 +65,51 @@ def _findings(client, headers, inv_id):
 class TestRuleProc001:
     """RULE-PROC-001: PowerShell execution — process_name == powershell.exe."""
 
-    def test_fires_on_powershell_process(self, app_client, auth_headers):
-        """Rule must fire when powershell.exe appears as the process name."""
+    def test_fires_on_powershell_process(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,powershell.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
+        inv_id, sid = _setup(app_client, csv)
+        result = _run_detection(app_client, sid)
         assert result["findings_created"] >= 1
-
-        findings = _findings(app_client, auth_headers, inv_id)
+        findings = _findings(app_client, inv_id)
         proc_findings = [f for f in findings if "RULE-PROC-001" in f.get("rule_id", "")]
         assert len(proc_findings) >= 1, "Expected RULE-PROC-001 to fire on powershell.exe"
 
-    def test_fires_case_insensitive(self, app_client, auth_headers):
-        """Rule is case-insensitive — PowerShell.EXE must also match."""
+    def test_fires_case_insensitive(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,PowerShell.EXE,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        # Normalization lowercases process_name; rule uses equals (case-insensitive compare)
+        inv_id, sid = _setup(app_client, csv)
+        result = _run_detection(app_client, sid)
         assert result["findings_created"] >= 1
 
-    def test_does_not_fire_on_unrelated_process(self, app_client, auth_headers):
-        """Rule must NOT fire on benign processes."""
+    def test_does_not_fire_on_unrelated_process(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,notepad.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         proc_findings = [f for f in findings if "RULE-PROC-001" in f.get("rule_id", "")]
         assert len(proc_findings) == 0
 
-    def test_description_does_not_claim_encoding(self, app_client, auth_headers):
-        """Finding description must NOT claim encoded/unconstrained execution — only process execution."""
+    def test_description_does_not_claim_encoding(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,powershell.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         proc_findings = [f for f in findings if "RULE-PROC-001" in f.get("rule_id", "")]
         assert len(proc_findings) >= 1
         desc = proc_findings[0]["description"].lower()
-        # Must NOT assert properties the evidence cannot establish
-        assert "encoded" not in desc, \
-            "Description must not claim encoded execution — evidence only shows process name"
-        assert "unconstrained" not in desc, \
-            "Description must not claim unconstrained execution — evidence only shows process name"
+        assert "encoded" not in desc, "Description must not claim encoded execution"
+        assert "unconstrained" not in desc, "Description must not claim unconstrained execution"
 
 
 # ── RULE-AUTH-SEQ-001 ─────────────────────────────────────────────────────────
@@ -138,76 +117,67 @@ class TestRuleProc001:
 class TestRuleAuthSeq001:
     """RULE-AUTH-SEQ-001: Brute-force pattern — requires AUTH_LOGIN event type."""
 
-    def test_fires_on_auth_login_failure_then_success(self, app_client, auth_headers):
-        """Rule must fire when AUTH_LOGIN events show failure then success for same user."""
+    def test_fires_on_auth_login_failure_then_success(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,status\n"
             b"2024-01-01T10:00:00Z,auth_login,alice,FAILURE\n"
             b"2024-01-01T10:01:00Z,auth_login,alice,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
-        assert len(auth_findings) >= 1, \
-            "Expected RULE-AUTH-SEQ-001 on AUTH_LOGIN failure→success sequence"
+        assert len(auth_findings) >= 1, "Expected RULE-AUTH-SEQ-001 on AUTH_LOGIN failure\u2192success"
 
-    def test_does_not_fire_on_non_auth_status_sequence(self, app_client, auth_headers):
-        """Rule must NOT fire when failure→success is from non-authentication event types."""
-        # process_create events with FAILURE then SUCCESS — not authentication
+    def test_does_not_fire_on_non_auth_status_sequence(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,process_name,status\n"
             b"2024-01-01T10:00:00Z,process_create,alice,cmd.exe,FAILURE\n"
             b"2024-01-01T10:01:00Z,process_create,alice,cmd.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
-        assert len(auth_findings) == 0, \
-            "RULE-AUTH-SEQ-001 must NOT fire on non-authentication failure→success (e.g. process_create)"
+        assert len(auth_findings) == 0, "RULE-AUTH-SEQ-001 must NOT fire on process_create"
 
-    def test_does_not_fire_on_auth_login_success_only(self, app_client, auth_headers):
-        """Rule must NOT fire when only successful auth events exist (no prior failure)."""
+    def test_does_not_fire_on_auth_login_success_only(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,status\n"
             b"2024-01-01T10:00:00Z,auth_login,bob,SUCCESS\n"
             b"2024-01-01T10:01:00Z,auth_login,bob,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
         assert len(auth_findings) == 0, "Rule must not fire without a prior failure step"
 
-    def test_does_not_fire_outside_time_window(self, app_client, auth_headers):
-        """Rule must NOT fire when failure and success are more than 5 minutes apart."""
+    def test_does_not_fire_outside_time_window(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,status\n"
             b"2024-01-01T10:00:00Z,auth_login,carol,FAILURE\n"
-            b"2024-01-01T10:10:00Z,auth_login,carol,SUCCESS\n"  # 10 min gap > 5 min window
+            b"2024-01-01T10:10:00Z,auth_login,carol,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
         assert len(auth_findings) == 0, "Rule must not fire when events exceed max_span_seconds"
 
-    def test_respects_user_grouping(self, app_client, auth_headers):
-        """Rule must only match within the same user group — cross-user sequences must not fire."""
+    def test_respects_user_grouping(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,status\n"
             b"2024-01-01T10:00:00Z,auth_login,userA,FAILURE\n"
-            b"2024-01-01T10:01:00Z,auth_login,userB,SUCCESS\n"  # different user
+            b"2024-01-01T10:01:00Z,auth_login,userB,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
         assert len(auth_findings) == 0, "Rule must not match across different users"
 
-    def test_mixed_event_types_does_not_trigger_on_process_status(self, app_client, auth_headers):
-        """When auth and non-auth events are mixed, only AUTH_LOGIN events count for the sequence."""
+    def test_mixed_event_types_does_not_trigger_on_process_status(self, app_client):
         csv = (
             b"timestamp,event_type,user_id,process_name,status\n"
             b"2024-01-01T10:00:00Z,process_create,dave,cmd.exe,FAILURE\n"
@@ -215,71 +185,155 @@ class TestRuleAuthSeq001:
             b"2024-01-01T10:02:00Z,process_create,dave,notepad.exe,SUCCESS\n"
             b"2024-01-01T10:03:00Z,auth_login,dave,,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         auth_findings = [f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", "")]
-        # Must fire: auth_login/FAILURE → auth_login/SUCCESS (dave, within window)
         assert len(auth_findings) >= 1, \
-            "Rule must fire on auth_login failure→success even when non-auth events are interleaved"
-        # The supporting evidence must all be AUTH_LOGIN events
-        for finding in auth_findings:
-            # All evidence_ids referenced should come from auth_login events
-            pass  # evidence_id linkage verified via existence of finding
+            "Rule must fire on auth_login failure\u2192success even when non-auth events are interleaved"
 
 
-# ── RULE-PROC-002 (unchanged — regression guard) ──────────────────────────────
+# ── RULE-PROC-002 ─────────────────────────────────────────────────────────────
 
 class TestRuleProc002:
-    """RULE-PROC-002: Mimikatz — semantics unchanged, regression guard."""
-
-    def test_fires_on_mimikatz_process(self, app_client, auth_headers):
+    def test_fires_on_mimikatz_process(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,mimikatz.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         mimi_findings = [f for f in findings if "RULE-PROC-002" in f.get("rule_id", "")]
         assert len(mimi_findings) >= 1
 
-    def test_does_not_fire_on_unrelated_process(self, app_client, auth_headers):
+    def test_does_not_fire_on_unrelated_process(self, app_client):
         csv = (
             b"timestamp,event_type,process_name,status\n"
             b"2024-01-01T09:00:00Z,process_create,explorer.exe,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         mimi_findings = [f for f in findings if "RULE-PROC-002" in f.get("rule_id", "")]
         assert len(mimi_findings) == 0
 
 
-# ── IOC-IP-001 (unchanged — regression guard) ─────────────────────────────────
+# ── IOC-IP-001 ────────────────────────────────────────────────────────────────
 
 class TestIocIp001:
-    """IOC-IP-001: IP address IOC match — regression guard."""
-
-    def test_fires_on_matching_ip(self, app_client, auth_headers):
-        # Use a reserved test IP — same value already in the rule
+    def test_fires_on_matching_ip(self, app_client):
         csv = (
             b"timestamp,event_type,ip_address,status\n"
             b"2024-01-01T09:00:00Z,network_connect,198.51.100.10,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         ioc_findings = [f for f in findings if "IOC-IP-001" in f.get("rule_id", "")]
         assert len(ioc_findings) >= 1
 
-    def test_does_not_fire_on_benign_ip(self, app_client, auth_headers):
+    def test_does_not_fire_on_benign_ip(self, app_client):
         csv = (
             b"timestamp,event_type,ip_address,status\n"
             b"2024-01-01T09:00:00Z,network_connect,10.0.0.1,SUCCESS\n"
         )
-        inv_id, sid = _setup(app_client, auth_headers, csv)
-        result = _run_detection(app_client, auth_headers, sid)
-        findings = _findings(app_client, auth_headers, inv_id)
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
         ioc_findings = [f for f in findings if "IOC-IP-001" in f.get("rule_id", "")]
         assert len(ioc_findings) == 0
+
+
+# ── FINDING-TO-EVIDENCE TRACEABILITY ─────────────────────────────────────────
+
+class TestFindingEvidenceTraceability:
+    def test_single_event_finding_has_evidence_ids_in_list_and_detail(self, app_client):
+        """Verify that single-event detections link to their exact supporting evidence item."""
+        csv = (
+            b"timestamp,event_type,process_name,status\n"
+            b"2024-01-01T09:00:00Z,process_create,mimikatz.exe,SUCCESS\n"
+        )
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
+        mimi = next(f for f in findings if "RULE-PROC-002" in f.get("rule_id", ""))
+
+        # 1. Verify list_findings returns evidence_ids with 1 item
+        assert "evidence_ids" in mimi
+        assert len(mimi["evidence_ids"]) == 1
+        evd_id = mimi["evidence_ids"][0]
+
+        # 2. Verify get_finding_detail returns the same evidence_ids
+        detail_res = app_client.get(f"/api/v1/detection/findings/{mimi['id']}")
+        assert detail_res.status_code == 200
+        detail = detail_res.json()
+        assert detail["evidence_ids"] == [evd_id]
+
+        # 3. Verify the referenced evidence item actually exists and matches
+        evd_res = app_client.get(f"/api/v1/evidence/{evd_id}")
+        assert evd_res.status_code == 200
+        evd = evd_res.json()
+        assert evd["process_name"] == "mimikatz.exe"
+
+    def test_sequence_rule_finding_links_all_chain_evidence_ids(self, app_client):
+        """Verify that multi-event sequence rules link to all events in the chain."""
+        csv = (
+            b"timestamp,event_type,user_id,status\n"
+            b"2024-01-01T10:00:00Z,auth_login,alice,FAILURE\n"
+            b"2024-01-01T10:01:00Z,auth_login,alice,SUCCESS\n"
+        )
+        inv_id, sid = _setup(app_client, csv)
+        _run_detection(app_client, sid)
+        findings = _findings(app_client, inv_id)
+        auth_seq = next(f for f in findings if "RULE-AUTH-SEQ-001" in f.get("rule_id", ""))
+
+        assert "evidence_ids" in auth_seq
+        # Must link to both failure and success evidence records
+        assert len(auth_seq["evidence_ids"]) == 2
+
+        # Check detail endpoint
+        detail_res = app_client.get(f"/api/v1/detection/findings/{auth_seq['id']}")
+        assert detail_res.status_code == 200
+        assert len(detail_res.json()["evidence_ids"]) == 2
+
+    def test_finding_without_associations_returns_empty_list(self, app_client):
+        """Verify that findings without associated evidence return an empty list, not null."""
+        # Provision an investigation and insert a finding directly with no associations
+        r = app_client.post(
+            "/api/v1/investigations",
+            json={"title": "NoAssocTest", "case_number": f"NOA-{uuid.uuid4().hex[:6]}"},
+        )
+        inv_id = r.json()["id"]
+
+        from app.database.session import SessionLocal
+        from app.models.finding import Finding
+
+        with SessionLocal() as db:
+            standalone = Finding(
+                id=uuid.uuid4(),
+                investigation_id=uuid.UUID(inv_id),
+                finding_type="RULE_MATCH",
+                rule_id="MANUAL-001",
+                severity_score=0.5,
+                description="Manual finding without evidence associations",
+            )
+            db.add(standalone)
+            db.commit()
+            standalone_id = str(standalone.id)
+
+        # In list endpoint
+        findings = _findings(app_client, inv_id)
+        assert len(findings) == 1
+        assert findings[0]["evidence_ids"] == []
+
+        # In detail endpoint
+        detail_res = app_client.get(f"/api/v1/detection/findings/{standalone_id}")
+        assert detail_res.status_code == 200
+        assert detail_res.json()["evidence_ids"] == []
+
+    def test_finding_detail_not_found(self, app_client):
+        """Verify 404 on nonexistent finding ID."""
+        fake_id = uuid.uuid4()
+        r = app_client.get(f"/api/v1/detection/findings/{fake_id}")
+        assert r.status_code == 404

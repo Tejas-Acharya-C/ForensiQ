@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Sequence, Literal
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
 
 from app.core.logging import get_logger
@@ -189,7 +189,12 @@ class PrioritizationService:
         if not db.get(Investigation, investigation_id):
             raise NotFoundError(f"Investigation '{investigation_id}' not found.")
 
-        activities = db.query(Activity).filter_by(investigation_id=investigation_id).all()
+        activities = (
+            db.query(Activity)
+            .options(selectinload(Activity.findings), selectinload(Activity.evidence_items))
+            .filter_by(investigation_id=investigation_id)
+            .all()
+        )
         if not activities:
             return PrioritizationSummary(investigation_id, "PROPOSED_CONTEXTUAL", "ACTIVITY", "INSUFFICIENT_DATA", 0, 0, errors=["No activities found."], duration_ms=round((time.perf_counter() - start_time) * 1000, 2))
 

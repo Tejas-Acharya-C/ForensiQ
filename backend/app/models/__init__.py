@@ -1,5 +1,7 @@
 """Domain models package export and registry."""
 
+# User is retained here so Alembic autogenerate continues to see the users
+# table definition — the table itself remains in the database schema.
 from app.database.base import Base
 from app.models.user import User
 from app.models.investigation import Investigation

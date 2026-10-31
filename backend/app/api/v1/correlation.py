@@ -1,4 +1,4 @@
-"""Contextual Evidence Correlation API controller for ForensiQ Phase 7 (Hardened for Phase 9C)."""
+"""Contextual Evidence Correlation API controller."""
 
 import uuid
 from typing import List, Optional, Dict, Any, Literal
@@ -6,22 +6,18 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from app.api.deps import (
-    get_current_user,
     check_investigation_access,
     check_source_access,
     rate_limit_analysis,
 )
 from app.database.session import get_db
 from app.correlation import CorrelationService, CorrelationSummary
-from app.models.investigation import Investigation
 from app.models.relationship import Relationship
-from app.models.user import User
 from app.schemas.relationship import RelationshipRead
 from app.schemas.pagination import PaginatedResponse
 from app.core.errors import NotFoundError
 
 router = APIRouter(prefix="/correlation", tags=["Contextual Correlation"])
-
 
 
 class CorrelationSummaryResponse(BaseModel):
@@ -49,11 +45,10 @@ class CorrelationSummaryResponse(BaseModel):
 def run_evidence_correlation(
     source_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
     _rate_limit: None = Depends(rate_limit_analysis),
 ) -> CorrelationSummaryResponse:
     """Run contextual correlation discovering multi-dimensional relationships across evidence records."""
-    check_source_access(source_id, db, current_user)
+    check_source_access(source_id, db)
 
     service = CorrelationService()
     summary: CorrelationSummary = service.analyze_source_evidence(db=db, source_id=source_id)
@@ -78,11 +73,11 @@ def run_evidence_correlation(
     "/relationships",
     response_model=PaginatedResponse[RelationshipRead],
     status_code=status.HTTP_200_OK,
-    summary="Query discovered evidence relationships with pagination, filtering, and authorization",
+    summary="Query discovered evidence relationships with pagination and filtering",
 )
 def list_relationships(
     investigation_id: Optional[uuid.UUID] = Query(None, description="Filter by investigation ID"),
-    relationship_type: Optional[str] = Query(None, description="Filter by relationship type (e.g. SHARED_CONTEXT, SAME_USER)"),
+    relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
     min_weight: Optional[float] = Query(None, ge=0.0, le=1.0, description="Filter by minimum relationship weight"),
     source_evidence_id: Optional[uuid.UUID] = Query(None, description="Filter by source evidence ID"),
     target_evidence_id: Optional[uuid.UUID] = Query(None, description="Filter by target evidence ID"),
@@ -91,18 +86,13 @@ def list_relationships(
     limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> PaginatedResponse[RelationshipRead]:
-    """Retrieve paginated contextual evidence relationships with authorization-first scoping and stable sorting."""
+    """Retrieve paginated contextual evidence relationships scoped to the requested investigation."""
     query = db.query(Relationship)
 
     if investigation_id:
-        check_investigation_access(investigation_id, db, current_user)
+        check_investigation_access(investigation_id, db)
         query = query.filter(Relationship.investigation_id == investigation_id)
-    else:
-        query = query.join(Investigation, Relationship.investigation_id == Investigation.id).filter(
-            (Investigation.owner_user_id == current_user.id) | (Investigation.owner_user_id.is_(None))
-        )
 
     if relationship_type:
         query = query.filter(Relationship.relationship_type == relationship_type)
@@ -160,13 +150,17 @@ def list_relationships(
 )
 def get_relationship_detail(
     relationship_id: uuid.UUID,
+    investigation_id: Optional[uuid.UUID] = Query(None, description="Optional investigation ID to verify investigation containment"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> RelationshipRead:
-    """Retrieve full detail for a single relationship with investigation scope check."""
+    """Retrieve full detail for a single relationship with optional investigation containment check."""
+    if investigation_id:
+        check_investigation_access(investigation_id, db)
+
     rel = db.get(Relationship, relationship_id)
-    if not rel:
+    if not rel or (investigation_id and rel.investigation_id != investigation_id):
+        if investigation_id:
+            raise NotFoundError(f"Relationship with ID '{relationship_id}' not found in investigation '{investigation_id}'.")
         raise NotFoundError(f"Relationship with ID '{relationship_id}' not found.")
 
-    check_investigation_access(rel.investigation_id, db, current_user)
     return RelationshipRead.model_validate(rel)

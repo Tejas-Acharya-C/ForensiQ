@@ -41,9 +41,12 @@ class User(Base):
     )
 
     # Relationships
+    # back_populates removed — the Investigation.owner relationship was
+    # removed when authentication was removed.  The users table and the
+    # owner_user_id FK remain in the schema; this relationship is simply
+    # no longer navigated from the application layer.
     investigations: Mapped[List["Investigation"]] = relationship(
         "Investigation",
-        back_populates="owner",
         cascade="all",
         lazy="select",
     )

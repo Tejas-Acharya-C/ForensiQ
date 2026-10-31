@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"   # bind to loopback only — prevents LAN/public exposure
 
   app:
     build:
@@ -33,9 +33,6 @@ services:
       DEBUG: "false"
       LOG_LEVEL: INFO
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-forensiq}
-      JWT_SECRET: ${JWT_SECRET:-please-change-this-jwt-secret-to-high-entropy-key-32-chars}
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
       SERVE_FRONTEND: "true"
       STATIC_DIR: /app/frontend
       UPLOAD_SOURCE_DIR: /app/data/sources
@@ -44,7 +41,7 @@ services:
       - evidence_sources:/app/data/sources
       - evidence_staging:/app/data/staging
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"   # bind to loopback only — prevents LAN/public exposure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 15s

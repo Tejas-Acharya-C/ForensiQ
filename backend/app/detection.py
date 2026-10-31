@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Sequence, Set, Tuple
 from collections import defaultdict
 import numpy as np
-import pandas as pd
 from sklearn.ensemble import IsolationForest
 import yaml
 
@@ -293,20 +292,20 @@ class MLAnomalyService:
             delta = max(0.0, ts - last_ts.get(key, ts))
             last_ts[key] = ts
             
-            f = {
-                "freq": user_counts[e.user_id] / len(evidence_list) if e.user_id else 0,
-                "delta_log": math.log10(delta + 1),
-                "is_fail": 1.0 if ("FAIL" in str(e.status).upper() or "ERROR" in str(e.status).upper()) else 0.0,
-                "hour_sin": math.sin(2 * math.pi * (datetime.fromtimestamp(ts).hour / 24.0)),
-            }
-            features.append(f)
-            
-        df = pd.DataFrame(features)
-        
+            hour = e.timestamp.hour if e.timestamp else 0
+            features.append([
+                float(user_counts[e.user_id] / len(evidence_list)) if e.user_id else 0.0,
+                float(math.log10(delta + 1)),
+                1.0 if ("FAIL" in str(e.status).upper() or "ERROR" in str(e.status).upper()) else 0.0,
+                float(math.sin(2 * math.pi * (hour / 24.0))),
+            ])
+
+        X = np.array(features, dtype=float)
+
         # Simple ML Anomaly Detection using Isolation Forest
         model = IsolationForest(n_estimators=100, contamination=0.05, random_state=42)
-        model.fit(df)
-        scores = -model.score_samples(df)
+        model.fit(X)
+        scores = -model.score_samples(X)
         
         min_score, max_score = float(np.percentile(scores, 1)), float(np.percentile(scores, 99))
         if max_score <= min_score: max_score = min_score + 0.1

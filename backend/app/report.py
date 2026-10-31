@@ -4,6 +4,7 @@ Produces a professional A4 PDF from live investigation data using ReportLab.
 No database writes. No persistent storage. Pure in-memory generation.
 """
 
+import html
 import io
 import os
 from pathlib import Path
@@ -31,8 +32,9 @@ from reportlab.lib.utils import ImageReader
 
 # Resolve absolute paths to assets
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-LOGO_PATH = PROJECT_ROOT / "images" / "logo.png"
-WORDMARK_PATH = PROJECT_ROOT / "images" / "logo_wordmap.png"
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+LOGO_PATH = FRONTEND_DIR / "images" / "logo.png"
+WORDMARK_PATH = FRONTEND_DIR / "images" / "logo_wordmap.png"
 
 # ── Palette ────────────────────────────────────────────────────────────────────
 C_NAVY     = colors.HexColor("#0f172a")
@@ -51,10 +53,6 @@ C_HIGH     = colors.HexColor("#c2410c")
 C_MEDIUM   = colors.HexColor("#a16207")
 C_LOW      = colors.HexColor("#1d4ed8")
 C_INFO_C   = colors.HexColor("#475569")
-
-def _tier_color(tier: str) -> Any:
-    return {"CRITICAL": C_CRITICAL, "HIGH": C_HIGH,
-            "MEDIUM": C_MEDIUM, "LOW": C_LOW}.get(tier, C_INFO_C)
 
 # ── Human-readable label maps ──────────────────────────────────────────────────
 FINDING_TYPE_LABELS = {
@@ -229,12 +227,13 @@ class _ForensiqDoc(BaseDocTemplate):
 
 # ── Cell / header helpers ───────────────────────────────────────────────────────
 def _th(text: str, s: Dict) -> Paragraph:
-    return Paragraph(text, s["th_style"])
+    return Paragraph(html.escape(str(text)), s["th_style"])
 
 
 def _td(text: str, s: Dict, mono: bool = False) -> Paragraph:
     st = s["cell_mono"] if mono else s["cell"]
-    return Paragraph("—" if (text is None or str(text).strip() == "") else str(text), st)
+    val = "—" if (text is None or str(text).strip() == "") else html.escape(str(text))
+    return Paragraph(val, st)
 
 
 def _base_style() -> List:
@@ -331,7 +330,7 @@ def generate_report_pdf(data: ReportData) -> bytes:
     # Clean Cover Metadata Grid
     meta_rows = [
         [Paragraph("CASE IDENTIFIER", s["cover_meta_lbl"]), Paragraph("INVESTIGATION TITLE", s["cover_meta_lbl"])],
-        [Paragraph(case_number, s["cover_meta_val"]), Paragraph(str(inv.get('title', '—')), s["cover_meta_val"])],
+        [Paragraph(html.escape(str(case_number)), s["cover_meta_val"]), Paragraph(html.escape(str(inv.get('title', '—'))), s["cover_meta_val"])],
         [Paragraph("STATUS", s["cover_meta_lbl"]), Paragraph("CREATED", s["cover_meta_lbl"])],
         [Paragraph(_label(inv.get('status','OPEN'), STATUS_LABELS), s["cover_meta_val"]), Paragraph(_fmt_dt(inv.get('created_at')), s["cover_meta_val"])],
         [Paragraph("GENERATED", s["cover_meta_lbl"]), Paragraph("", s["cover_meta_lbl"])],
@@ -359,7 +358,7 @@ def generate_report_pdf(data: ReportData) -> bytes:
         f"and {sm.get('total_relationships', 0)} forensic correlations, which were subsequently "
         f"grouped into {sm.get('total_activities', 0)} investigation activities."
     )
-    story.append(Paragraph(overview_text, s["body"]))
+    story.append(Paragraph(html.escape(overview_text), s["body"]))
 
     story.append(Spacer(1, 15 * mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER, spaceAfter=4))
@@ -413,20 +412,22 @@ def generate_report_pdf(data: ReportData) -> bytes:
     if data.findings:
         f_rows = [[
             _th("Type", s), _th("Sev.", s), _th("Rule / IOC", s),
-            _th("MITRE", s), _th("Description", s), _th("Detected", s),
+            _th("MITRE", s), _th("Description", s), _th("Evid.", s), _th("Detected", s),
         ]]
         for f in data.findings:
             ftype = _label(f.get("finding_type", ""), FINDING_TYPE_LABELS)
+            ev_count = f.get("evidence_count", len(f.get("evidence_ids", [])))
             f_rows.append([
                 _td(ftype, s),
                 _td(f"{f.get('severity', 0):.2f}", s),
                 _td(f.get("rule_id", ""), s, mono=True),
                 _td(f.get("mitre_tactic", ""), s),
                 _td(f.get("description", ""), s),
+                _td(str(ev_count), s),
                 _td(_fmt_dt(f.get("created_at")).replace(" UTC",""), s),
             ])
-        desc_w = pw - (25 + 12 + 35 + 25 + 28) * mm
-        story.append(_tbl(f_rows, [25*mm, 12*mm, 35*mm, 25*mm, desc_w, 28*mm]))
+        desc_w = pw - (24 + 12 + 32 + 22 + 14 + 26) * mm
+        story.append(_tbl(f_rows, [24*mm, 12*mm, 32*mm, 22*mm, desc_w, 14*mm, 26*mm]))
     else:
         story.append(Paragraph("No findings recorded for this investigation.", s["body"]))
 
@@ -534,7 +535,10 @@ def generate_report_pdf(data: ReportData) -> bytes:
         "Detection, anomaly, correlation, and prioritisation results are analytical outputs for "
         "investigator review and do not by themselves establish malicious intent, attribution, "
         "guilt, or legal conclusions. All findings should be verified by a qualified investigator "
-        "before being used as the basis for any legal, disciplinary, or enforcement action.",
+        "before being used as the basis for any legal, disciplinary, or enforcement action. "
+        "Cryptographic SHA-256 hashes recorded for evidence sources verify raw data content integrity "
+        "at ingestion time; this report is an automated analytical summary and does not constitute "
+        "a verified X.509 digital signature or formal legal chain-of-custody certification.",
         s["disclaimer"],
     ))
 
