@@ -41,6 +41,15 @@ const state = {
     loading: false,
     requestId: 0,
   },
+  findingsState: {
+    rawFindings: [],
+    filteredFindings: [],
+    selectedFindingId: null,
+    searchQuery: '',
+    priorityFilter: '',
+    methodFilter: '',
+    activityFilter: '',
+  },
 };
 
 // URL-Driven Route Configuration (Phase 3)
@@ -741,6 +750,19 @@ function renderEmptyInvestigation() {
   if (prioTbody) prioTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
   const findTbody = document.getElementById('findings-tbody');
   if (findTbody) findTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
+  const elFindTotal = document.getElementById('findings-count-total');
+  if (elFindTotal) elFindTotal.textContent = '0';
+  const elFindHigh = document.getElementById('findings-count-high');
+  if (elFindHigh) elFindHigh.textContent = '0';
+  const elFindMed = document.getElementById('findings-count-medium');
+  if (elFindMed) elFindMed.textContent = '0';
+  const elFindLow = document.getElementById('findings-count-low');
+  if (elFindLow) elFindLow.textContent = '0';
+  const selectedFindingCard = document.getElementById('selected-finding-summary-card');
+  if (selectedFindingCard) selectedFindingCard.style.display = 'none';
+  state.findingsState.rawFindings = [];
+  state.findingsState.filteredFindings = [];
+  state.findingsState.selectedFindingId = null;
   const evTbody = document.getElementById('evidence-records-tbody');
   if (evTbody) evTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
   const pageInfo = document.getElementById('evidence-page-info');
@@ -1978,6 +2000,97 @@ function setupEventListeners() {
   const filterFindingType = document.getElementById('filter-finding-type');
   if (filterFindingType) filterFindingType.addEventListener('change', loadFindings);
 
+  // Threat Discovery Interface Event Listeners (Phase 1)
+  const findingsSearchInput = document.getElementById('findings-search-input');
+  const findingsSearchClear = document.getElementById('findings-search-clear');
+  if (findingsSearchInput) {
+    findingsSearchInput.addEventListener('input', (e) => {
+      state.findingsState.searchQuery = e.target.value;
+      if (findingsSearchClear) {
+        findingsSearchClear.style.display = e.target.value ? 'inline-block' : 'none';
+      }
+      applyFindingsFilters();
+    });
+  }
+  if (findingsSearchClear) {
+    findingsSearchClear.addEventListener('click', () => {
+      if (findingsSearchInput) findingsSearchInput.value = '';
+      findingsSearchClear.style.display = 'none';
+      state.findingsState.searchQuery = '';
+      applyFindingsFilters();
+    });
+  }
+
+  const filterFindingsPriority = document.getElementById('filter-findings-priority');
+  if (filterFindingsPriority) {
+    filterFindingsPriority.addEventListener('change', (e) => {
+      state.findingsState.priorityFilter = e.target.value;
+      applyFindingsFilters();
+    });
+  }
+
+  const filterFindingsMethod = document.getElementById('filter-findings-method');
+  if (filterFindingsMethod) {
+    filterFindingsMethod.addEventListener('change', (e) => {
+      state.findingsState.methodFilter = e.target.value;
+      applyFindingsFilters();
+    });
+  }
+
+  const filterFindingsActivity = document.getElementById('filter-findings-activity');
+  if (filterFindingsActivity) {
+    filterFindingsActivity.addEventListener('change', (e) => {
+      state.findingsState.activityFilter = e.target.value;
+      applyFindingsFilters();
+    });
+  }
+
+  const btnResetFindings = document.getElementById('btn-reset-findings-filters');
+  if (btnResetFindings) {
+    btnResetFindings.addEventListener('click', resetFindingsFilters);
+  }
+
+  const btnClearActiveFilters = document.getElementById('btn-clear-active-filters');
+  if (btnClearActiveFilters) {
+    btnClearActiveFilters.addEventListener('click', resetFindingsFilters);
+  }
+
+  // Metric Cards click-to-filter
+  const cardMetricTotal = document.getElementById('metric-card-total');
+  if (cardMetricTotal) {
+    cardMetricTotal.addEventListener('click', resetFindingsFilters);
+  }
+
+  const cardMetricHigh = document.getElementById('metric-card-high');
+  if (cardMetricHigh) {
+    cardMetricHigh.addEventListener('click', () => {
+      const pSelect = document.getElementById('filter-findings-priority');
+      if (pSelect) pSelect.value = 'HIGH';
+      state.findingsState.priorityFilter = 'HIGH';
+      applyFindingsFilters();
+    });
+  }
+
+  const cardMetricMed = document.getElementById('metric-card-medium');
+  if (cardMetricMed) {
+    cardMetricMed.addEventListener('click', () => {
+      const pSelect = document.getElementById('filter-findings-priority');
+      if (pSelect) pSelect.value = 'MEDIUM';
+      state.findingsState.priorityFilter = 'MEDIUM';
+      applyFindingsFilters();
+    });
+  }
+
+  const cardMetricLow = document.getElementById('metric-card-low');
+  if (cardMetricLow) {
+    cardMetricLow.addEventListener('click', () => {
+      const pSelect = document.getElementById('filter-findings-priority');
+      if (pSelect) pSelect.value = 'LOW';
+      state.findingsState.priorityFilter = 'LOW';
+      applyFindingsFilters();
+    });
+  }
+
   const filterRelType = document.getElementById('filter-rel-type');
   if (filterRelType) filterRelType.addEventListener('change', loadCorrelations);
 
@@ -2382,6 +2495,862 @@ async function loadAllPrioritizations() {
   }
 }
 
+function getFindingTierBadgeClass(tier) {
+  const t = (tier || '').toUpperCase();
+  if (t === 'CRITICAL') return 'badge-tier-critical';
+  if (t === 'HIGH') return 'badge-tier-high';
+  if (t === 'MEDIUM') return 'badge-tier-medium';
+  if (t === 'LOW') return 'badge-tier-low';
+  return 'badge-tier-info';
+}
+
+function updateFindingsSummaryMetrics(findings) {
+  let highCount = 0;
+  let medCount = 0;
+  let lowCount = 0;
+
+  findings.forEach(f => {
+    const tier = (f.priority_tier || '').toUpperCase();
+    const sev = typeof f.severity === 'number' ? f.severity : (f.severity_score || 0);
+
+    if (tier === 'CRITICAL' || tier === 'HIGH' || (!tier && sev >= 0.6)) {
+      highCount++;
+    } else if (tier === 'MEDIUM' || (!tier && sev >= 0.4 && sev < 0.6)) {
+      medCount++;
+    } else {
+      lowCount++;
+    }
+  });
+
+  const elTotal = document.getElementById('findings-count-total');
+  if (elTotal) elTotal.textContent = findings.length;
+  const elHigh = document.getElementById('findings-count-high');
+  if (elHigh) elHigh.textContent = highCount;
+  const elMed = document.getElementById('findings-count-medium');
+  if (elMed) elMed.textContent = medCount;
+  const elLow = document.getElementById('findings-count-low');
+  if (elLow) elLow.textContent = lowCount;
+}
+
+function applyFindingsFilters() {
+  const raw = state.findingsState.rawFindings || [];
+  const search = (state.findingsState.searchQuery || '').trim().toLowerCase();
+  const prio = (state.findingsState.priorityFilter || '').toUpperCase().trim();
+  const method = (state.findingsState.methodFilter || '').toUpperCase().trim();
+  const activity = (state.findingsState.activityFilter || '').toUpperCase().trim();
+
+  // Update visual state of summary KPI cards
+  const cardTotal = document.getElementById('metric-card-total');
+  const cardHigh = document.getElementById('metric-card-high');
+  const cardMed = document.getElementById('metric-card-medium');
+  const cardLow = document.getElementById('metric-card-low');
+
+  if (cardTotal) cardTotal.classList.toggle('active-metric-filter', !prio && !search && !method && !activity);
+  if (cardHigh) cardHigh.classList.toggle('active-metric-filter', prio === 'HIGH' || prio === 'CRITICAL');
+  if (cardMed) cardMed.classList.toggle('active-metric-filter', prio === 'MEDIUM');
+  if (cardLow) cardLow.classList.toggle('active-metric-filter', prio === 'LOW' || prio === 'INFORMATIONAL');
+
+  const filtered = raw.filter(f => {
+    // 1. Search filter: Title, description, finding ID, evidence IDs, rule ID/name
+    if (search) {
+      const title = (f.title || f.rule_name || '').toLowerCase();
+      const desc = (f.description || '').toLowerCase();
+      const fid = (f.id || '').toLowerCase();
+      const rid = (f.rule_id || '').toLowerCase();
+      const tactic = (f.mitre_tactic || '').toLowerCase();
+      const technique = (f.mitre_technique || '').toLowerCase();
+      const methodText = (f.detection_method || f.finding_type || '').toLowerCase();
+      const evMatches = (f.evidence_ids || []).some(eid => String(eid).toLowerCase().includes(search));
+      const actMatches = (f.activity_ids || []).some(aid => String(aid).toLowerCase().includes(search)) ||
+                         (f.activity_id && String(f.activity_id).toLowerCase().includes(search));
+
+      const matchesSearch = title.includes(search) ||
+                            desc.includes(search) ||
+                            fid.includes(search) ||
+                            rid.includes(search) ||
+                            tactic.includes(search) ||
+                            technique.includes(search) ||
+                            methodText.includes(search) ||
+                            evMatches ||
+                            actMatches;
+      if (!matchesSearch) return false;
+    }
+
+    // 2. Priority Filter
+    if (prio) {
+      const tier = (f.priority_tier || '').toUpperCase();
+      const sev = typeof f.severity === 'number' ? f.severity : (f.severity_score || 0);
+
+      if (prio === 'CRITICAL') {
+        if (tier !== 'CRITICAL' && (tier || sev < 0.8)) return false;
+      } else if (prio === 'HIGH') {
+        if (tier !== 'HIGH' && (tier || (sev < 0.6 || sev >= 0.8))) return false;
+      } else if (prio === 'MEDIUM') {
+        if (tier !== 'MEDIUM' && (tier || (sev < 0.4 || sev >= 0.6))) return false;
+      } else if (prio === 'LOW') {
+        if (tier !== 'LOW' && (tier || (sev < 0.2 || sev >= 0.4))) return false;
+      } else if (prio === 'INFORMATIONAL') {
+        if (tier !== 'INFORMATIONAL' && (tier || sev >= 0.2)) return false;
+      }
+    }
+
+    // 3. Detection Method Filter
+    if (method) {
+      const ft = (f.finding_type || '').toUpperCase();
+      const dm = (f.detection_method || '').toUpperCase();
+      const rid = (f.rule_id || '').toUpperCase();
+
+      if (method === 'RULE') {
+        if (ft === 'ML_ANOMALY' || dm.includes('MACHINE LEARNING')) return false;
+      } else if (method === 'DETERMINISTIC') {
+        if (ft !== 'RULE_MATCH' || dm.includes('SEQUENCE') || rid.includes('SEQ')) return false;
+      } else if (method === 'SEQUENCE') {
+        if (!dm.includes('SEQUENCE') && !rid.includes('SEQ')) return false;
+      } else if (method === 'IOC') {
+        if (ft !== 'IOC_MATCH' && !dm.includes('IOC')) return false;
+      } else if (method === 'ML') {
+        if (ft !== 'ML_ANOMALY' && !dm.includes('MACHINE LEARNING')) return false;
+      }
+    }
+
+    // 4. Activity Filter
+    if (activity) {
+      const hasAct = (f.activity_ids && f.activity_ids.length > 0) || !!f.activity_id;
+      if (activity === 'CORRELATED' && !hasAct) return false;
+      if (activity === 'UNCORRELATED' && hasAct) return false;
+    }
+
+    return true;
+  });
+
+  state.findingsState.filteredFindings = filtered;
+  renderFindingsTable(filtered);
+}
+
+function renderFindingsTable(findings) {
+  const tbody = document.getElementById('findings-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  const filterStatusEl = document.getElementById('findings-filter-status');
+  const matchCountEl = document.getElementById('findings-match-count');
+  const isFiltered = !!(state.findingsState.searchQuery || state.findingsState.priorityFilter || state.findingsState.methodFilter || state.findingsState.activityFilter);
+
+  if (filterStatusEl && matchCountEl) {
+    if (isFiltered) {
+      filterStatusEl.style.display = 'flex';
+      matchCountEl.textContent = `Showing ${findings.length} of ${state.findingsState.rawFindings.length} findings matching filters`;
+    } else {
+      filterStatusEl.style.display = 'none';
+    }
+  }
+
+  if (!findings || findings.length === 0) {
+    if (state.findingsState.rawFindings.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">No analytical findings detected in this case. Run detections to evaluate evidence against rules.</td></tr>';
+    } else {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding: 24px;">
+        <div style="margin-bottom: 8px;">No findings match the selected filters or search query.</div>
+        <button class="btn btn-secondary btn-sm" onclick="resetFindingsFilters()">Clear Filters</button>
+      </td></tr>`;
+    }
+    const summaryCard = document.getElementById('selected-finding-summary-card');
+    if (summaryCard) summaryCard.style.display = 'none';
+    return;
+  }
+
+  // Ensure selected finding is valid or select top finding
+  let selectedId = state.findingsState.selectedFindingId;
+  if (!selectedId || !findings.some(f => f.id === selectedId)) {
+    selectedId = findings[0].id;
+    state.findingsState.selectedFindingId = selectedId;
+  }
+
+  findings.forEach(f => {
+    const isSelected = f.id === selectedId;
+    const tr = document.createElement('tr');
+    tr.className = `finding-row ${isSelected ? 'row-selected' : ''}`;
+    tr.id = `finding-row-${f.id}`;
+    tr.tabIndex = 0;
+    tr.setAttribute('role', 'button');
+    tr.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+
+    // Priority display & source attribution
+    const tier = (f.priority_tier || (f.severity >= 0.8 ? 'CRITICAL' : f.severity >= 0.6 ? 'HIGH' : f.severity >= 0.4 ? 'MEDIUM' : 'LOW')).toUpperCase();
+    const badgeClass = getFindingTierBadgeClass(tier);
+
+    let prioBadgeHtml = '';
+    if (typeof f.priority_score === 'number') {
+      const srcLabel = f.priority_source === 'ACTIVITY' ? 'Contextual Activity' : 'Baseline Artifact';
+      prioBadgeHtml = `
+        <span class="badge ${badgeClass}" title="${srcLabel} Priority: ${f.priority_score.toFixed(1)} / 100">
+          ${tier} <span style="opacity: 0.85; margin-left: 3px;">${f.priority_score.toFixed(0)}</span>
+        </span>
+      `;
+    } else {
+      prioBadgeHtml = `
+        <span class="badge ${badgeClass}" title="Unprioritized: Tier derived from direct detection severity (${f.severity.toFixed(2)})">
+          ${tier} <span style="opacity: 0.75; font-size: 9px; margin-left: 3px;">(SEV)</span>
+        </span>
+      `;
+    }
+
+    // Title & Rule subtext
+    const primaryTitle = f.title || f.rule_name || formatEnum(f.finding_type);
+    const ruleSubtext = f.rule_id || '—';
+
+    // Detection Method
+    const methodText = f.detection_method || (f.finding_type === 'ML_ANOMALY' ? 'ML Anomaly' : f.finding_type === 'IOC_MATCH' ? 'Rule (IOC)' : 'Rule (Deterministic)');
+
+    // Supporting Evidence count & chips
+    const evIds = f.evidence_ids || [];
+    const evCount = f.evidence_count || evIds.length;
+    let evChips = '';
+    if (evIds.length > 0) {
+      const previewIds = evIds.slice(0, 2);
+      const chipsHtml = previewIds.map(eid => `<span class="finding-evidence-chip" title="${escapeHtml(eid)}">EVD-${escapeHtml(String(eid).slice(0, 6))}</span>`).join('');
+      const moreHtml = evIds.length > 2 ? `<span class="text-xs text-muted" style="margin-left: 4px;">+${evIds.length - 2}</span>` : '';
+      evChips = `<div style="display: flex; align-items: center; gap: 4px; margin-top: 3px; flex-wrap: wrap;">${chipsHtml}${moreHtml}</div>`;
+    }
+
+    // Related Activity
+    const actId = f.activity_id || (f.activity_ids && f.activity_ids.length > 0 ? f.activity_ids[0] : null);
+    let actHtml = '<span class="text-muted text-xs">Uncorrelated</span>';
+    if (actId) {
+      actHtml = `<span class="badge badge-mono text-xs" style="color: var(--accent-technical);" title="${escapeHtml(actId)}">ACT-${escapeHtml(String(actId).slice(0, 6))}</span>`;
+    }
+
+    tr.innerHTML = `
+      <td>
+        ${prioBadgeHtml}
+      </td>
+      <td>
+        <div class="finding-title-cell">
+          <span class="finding-primary-title">${escapeHtml(primaryTitle)}</span>
+          <span class="finding-rule-subtext">${escapeHtml(ruleSubtext)}</span>
+        </div>
+      </td>
+      <td>
+        <span class="badge badge-mono text-xs">${escapeHtml(methodText)}</span>
+      </td>
+      <td>
+        <div style="font-size: 11px;">
+          <strong>${evCount}</strong> record${evCount === 1 ? '' : 's'}
+        </div>
+        ${evChips}
+      </td>
+      <td>
+        ${actHtml}
+      </td>
+      <td class="text-xs text-muted">
+        ${new Date(f.created_at).toLocaleString()}
+      </td>
+      <td style="text-align: center;">
+        <button class="btn btn-secondary btn-xs" onclick="event.stopPropagation(); viewFindingProofModal('${escapeHtml(f.id)}')" title="Inspect evidence verification proof">
+          Inspect
+        </button>
+      </td>
+    `;
+
+    tr.addEventListener('click', () => selectFinding(f.id));
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectFinding(f.id);
+      }
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  // Update selected finding summary card
+  if (selectedId) {
+    const activeItem = findings.find(f => f.id === selectedId) || findings[0];
+    renderSelectedFindingSummary(activeItem);
+  }
+}
+
+function selectFinding(findingId) {
+  state.findingsState.selectedFindingId = findingId;
+
+  // Update table row styling
+  document.querySelectorAll('.finding-row').forEach(row => {
+    row.classList.remove('row-selected');
+    row.setAttribute('aria-selected', 'false');
+  });
+  const selectedRow = document.getElementById(`finding-row-${findingId}`);
+  if (selectedRow) {
+    selectedRow.classList.add('row-selected');
+    selectedRow.setAttribute('aria-selected', 'true');
+  }
+
+  const finding = (state.findingsState.rawFindings || []).find(f => f.id === findingId);
+  if (finding) {
+    renderSelectedFindingSummary(finding);
+  }
+}
+
+function renderSelectedFindingSummary(f) {
+  const card = document.getElementById('selected-finding-summary-card');
+  if (!card) return;
+  card.style.display = 'flex';
+
+  const titleEl = document.getElementById('selected-finding-title');
+  if (titleEl) titleEl.textContent = f.title || f.rule_name || formatEnum(f.finding_type);
+
+  const prioBadge = document.getElementById('selected-finding-prio-badge');
+  if (prioBadge) {
+    const tier = (f.priority_tier || (f.severity >= 0.8 ? 'CRITICAL' : f.severity >= 0.6 ? 'HIGH' : f.severity >= 0.4 ? 'MEDIUM' : 'LOW')).toUpperCase();
+    prioBadge.className = `badge ${getFindingTierBadgeClass(tier)}`;
+    if (typeof f.priority_score === 'number') {
+      const srcText = f.priority_source === 'ACTIVITY' ? 'ACTIVITY PRIORITY' : 'ARTIFACT PRIORITY';
+      prioBadge.textContent = `${tier} · ${srcText} ${f.priority_score.toFixed(1)} / 100`;
+      prioBadge.title = `Computed by ${srcText} prioritization in the 7-stage pipeline.`;
+    } else {
+      prioBadge.textContent = `${tier} · SEVERITY ${f.severity.toFixed(2)} (FALLBACK)`;
+      prioBadge.title = 'Target not yet prioritized by the pipeline. Tier derived from direct detection severity score.';
+    }
+  }
+
+  const methodBadge = document.getElementById('selected-finding-method-badge');
+  if (methodBadge) {
+    methodBadge.textContent = f.detection_method || (f.finding_type === 'ML_ANOMALY' ? 'ML Anomaly' : 'Rule-based');
+  }
+
+  const sevBadge = document.getElementById('selected-finding-severity-badge');
+  if (sevBadge) {
+    sevBadge.textContent = `RAW SEV: ${f.severity.toFixed(2)} / 1.00`;
+    sevBadge.title = 'Raw algorithmic or configured rule severity score';
+  }
+
+  const idDisplay = document.getElementById('selected-finding-id-display');
+  if (idDisplay) idDisplay.textContent = `ID: ${f.id}`;
+
+  const ruleEl = document.getElementById('selected-finding-rule');
+  if (ruleEl) ruleEl.textContent = f.rule_id || '—';
+
+  const methodDetailEl = document.getElementById('selected-finding-method-detail');
+  if (methodDetailEl) methodDetailEl.textContent = f.detection_method || formatEnum(f.finding_type);
+
+  const mitreEl = document.getElementById('selected-finding-mitre');
+  if (mitreEl) {
+    mitreEl.textContent = f.mitre_tactic ? `${f.mitre_tactic} / ${f.mitre_technique || 'General'}` : 'None specified';
+  }
+
+  const tsEl = document.getElementById('selected-finding-timestamp');
+  if (tsEl) {
+    tsEl.textContent = f.created_at ? new Date(f.created_at).toLocaleString() : '—';
+  }
+
+  const actEl = document.getElementById('selected-finding-activity');
+  if (actEl) {
+    const actId = f.activity_id || (f.activity_ids && f.activity_ids.length > 0 ? f.activity_ids[0] : null);
+    actEl.textContent = actId ? `Activity ID: ${actId}` : 'None (Uncorrelated)';
+    actEl.className = actId ? 'summary-meta-value font-mono text-accent' : 'summary-meta-value text-muted';
+  }
+
+  const evEl = document.getElementById('selected-finding-evidence');
+  if (evEl) {
+    const evIds = f.evidence_ids || [];
+    evEl.textContent = `${evIds.length} associated record${evIds.length === 1 ? '' : 's'}${evIds.length > 0 ? ` (${evIds.slice(0, 2).map(id => 'EVD-' + String(id).slice(0, 6)).join(', ')}${evIds.length > 2 ? '...' : ''})` : ''}`;
+  }
+
+  const descEl = document.getElementById('selected-finding-desc');
+  if (descEl) descEl.textContent = f.description || 'No description provided.';
+
+  const fpEl = document.getElementById('selected-finding-fingerprint');
+  if (fpEl) fpEl.textContent = f.detection_fingerprint || f.id || '—';
+
+  const jsonPre = document.getElementById('selected-finding-raw-json');
+  if (jsonPre) jsonPre.textContent = JSON.stringify(f, null, 2);
+
+  const btnInspect = document.getElementById('btn-selected-finding-inspect');
+  if (btnInspect) {
+    btnInspect.onclick = () => viewFindingProofModal(f.id);
+  }
+
+  // Asynchronously fetch complete Phase 2 finding explanation
+  loadDetailedFindingExplanation(f.id);
+}
+
+async function loadDetailedFindingExplanation(findingId) {
+  const invId = state.activeInvestigationId;
+  const whyContent = document.getElementById('finding-why-detected-content');
+  const evContent = document.getElementById('finding-evidence-trace-content');
+  const actContent = document.getElementById('finding-activity-trace-content');
+  const prioContent = document.getElementById('finding-priority-trace-content');
+  const chainTrack = document.getElementById('finding-chain-track');
+
+  if (whyContent) whyContent.innerHTML = '<div class="text-muted text-xs" style="padding: 10px;">Resolving detection logic and condition evaluation...</div>';
+  if (evContent) evContent.innerHTML = '<div class="text-muted text-xs" style="padding: 10px;">Resolving supporting evidence provenance and cryptographic hashes...</div>';
+  if (actContent) actContent.innerHTML = '<div class="text-muted text-xs" style="padding: 10px;">Analyzing correlated activity clusters and graph relationships...</div>';
+  if (prioContent) prioContent.innerHTML = '<div class="text-muted text-xs" style="padding: 10px;">Resolving priority triage and factor breakdown...</div>';
+
+  try {
+    const url = `/detection/findings/${findingId}${invId ? `?investigation_id=${encodeURIComponent(invId)}` : ''}`;
+    const detail = await apiRequest(url);
+
+    // Update raw json with enriched detail payload
+    const jsonPre = document.getElementById('selected-finding-raw-json');
+    if (jsonPre) jsonPre.textContent = JSON.stringify(detail, null, 2);
+
+    const explanation = detail.explanation;
+    if (!explanation) {
+      if (whyContent) whyContent.innerHTML = '<div class="text-muted text-xs">Standard finding summary loaded. Detailed explanation unavailable.</div>';
+      return;
+    }
+
+    // 1. Render Investigation Traceability Chain
+    renderInvestigationChain(explanation.investigation_chain || []);
+
+    // 2. Render "Why Was This Detected?"
+    renderWhyDetectedSection(explanation.detection);
+
+    // 3. Render Supporting Evidence Traceability
+    renderSupportingEvidenceSection(explanation.evidence || []);
+
+    // 4. Render Correlated Activities
+    renderCorrelatedActivitiesSection(explanation.activities || []);
+
+    // 5. Render Priority Determination & Breakdown
+    renderPriorityExplanationSection(explanation.priority, explanation.secondary_priorities || []);
+
+  } catch (err) {
+    const errorHtml = `<div class="alert alert-danger" style="font-size: 11px; margin: 4px 0;">Error loading explanation: ${escapeHtml(err.message)}</div>`;
+    if (whyContent) whyContent.innerHTML = errorHtml;
+    if (evContent) evContent.innerHTML = errorHtml;
+    if (actContent) actContent.innerHTML = errorHtml;
+    if (prioContent) prioContent.innerHTML = errorHtml;
+  }
+}
+
+function renderInvestigationChain(nodes) {
+  const track = document.getElementById('finding-chain-track');
+  if (!track) return;
+  if (!nodes || nodes.length === 0) {
+    track.innerHTML = '<div class="text-muted text-xs">Investigation chain unavailable.</div>';
+    return;
+  }
+
+  let html = '';
+  nodes.forEach((node, idx) => {
+    const isInteractive = node.id && (node.node_type === 'EVIDENCE' || node.node_type === 'ACTIVITY');
+    let typeClass = 'chain-node-finding';
+    let clickAttr = '';
+
+    if (node.node_type === 'EVIDENCE') {
+      typeClass = 'chain-node-evidence';
+      if (node.id) clickAttr = `onclick="window.jumpToEvidenceRecord('', '${escapeHtml(node.id)}')" title="View in Evidence Explorer"`;
+    } else if (node.node_type === 'ACTIVITY') {
+      typeClass = 'chain-node-activity';
+      if (node.id) clickAttr = `onclick="window.jumpToActivityRecord('${escapeHtml(node.id)}')" title="Scroll to Activity"`;
+    } else if (node.node_type === 'PRIORITY') {
+      typeClass = 'chain-node-priority';
+      clickAttr = `onclick="document.getElementById('finding-section-priority')?.scrollIntoView({behavior:'smooth'})" title="Inspect Priority Breakdown"`;
+    }
+
+    html += `
+      <div class="chain-node ${typeClass} ${isInteractive || node.node_type === 'PRIORITY' ? 'interactive-node' : ''}" ${clickAttr}>
+        <div class="chain-node-header">
+          <span class="chain-node-type">${escapeHtml(node.node_type)}</span>
+          ${node.status_or_tier ? `<span class="badge badge-mono text-xs">${escapeHtml(node.status_or_tier)}</span>` : ''}
+        </div>
+        <div class="chain-node-title">${escapeHtml(node.label)}</div>
+        ${node.sublabel ? `<div class="chain-node-sub">${escapeHtml(node.sublabel)}</div>` : ''}
+      </div>
+    `;
+
+    if (idx < nodes.length - 1) {
+      html += `<span class="chain-connector">&rarr;</span>`;
+    }
+  });
+
+  track.innerHTML = html;
+}
+
+function renderWhyDetectedSection(det) {
+  const content = document.getElementById('finding-why-detected-content');
+  const catBadge = document.getElementById('finding-why-category-badge');
+  if (!content) return;
+  if (!det) {
+    content.innerHTML = '<div class="text-muted text-xs">No detection logic metadata available.</div>';
+    return;
+  }
+
+  if (catBadge) {
+    catBadge.textContent = det.category.replace(/_/g, ' ');
+  }
+
+  let bannerClass = 'why-banner-rule';
+  if (det.category === 'SEQUENCE') bannerClass = 'why-banner-sequence';
+  else if (det.category === 'IOC') bannerClass = 'why-banner-ioc';
+  else if (det.category === 'ISOLATION_FOREST') bannerClass = 'why-banner-ml';
+
+  let html = `
+    <div class="why-summary-banner ${bannerClass}">
+      <strong>Detection Summary:</strong> ${escapeHtml(det.summary)}
+    </div>
+  `;
+
+  // Matched Conditions Table for Rule & IOC findings
+  if (det.matched_conditions && det.matched_conditions.length > 0) {
+    html += `
+      <div style="margin-top: 4px;">
+        <span class="summary-meta-label" style="display: block; margin-bottom: 6px;">Evaluated Rule Conditions &amp; Observed Attributes</span>
+        <table class="conditions-table">
+          <thead>
+            <tr>
+              <th>Target Field</th>
+              <th>Operator</th>
+              <th>Configured Value</th>
+              <th>Observed Evidence Value</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${det.matched_conditions.map(c => `
+              <tr>
+                <td><code class="font-mono">${escapeHtml(c.field)}</code></td>
+                <td><span class="badge badge-mono">${escapeHtml(c.operator)}</span></td>
+                <td><code class="font-mono text-accent">${escapeHtml(String(c.expected_value))}</code></td>
+                <td><code class="font-mono">${escapeHtml(String(c.actual_value !== null ? c.actual_value : '—'))}</code></td>
+                <td><span class="condition-matched-pill">${c.matched ? 'MATCHED' : 'UNMATCHED'}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Sequence detection details
+  if (det.category === 'SEQUENCE' && det.sequence_steps && det.sequence_steps.length > 0) {
+    html += `
+      <div style="margin-top: 6px;">
+        <span class="summary-meta-label" style="display: block; margin-bottom: 6px;">Satisfied Sequence Progression (${det.actual_span_seconds !== null ? `${det.actual_span_seconds}s total` : ''})</span>
+        <div class="sequence-steps-container">
+          ${det.sequence_steps.map(step => `
+            <div class="sequence-step-card">
+              <div class="sequence-step-left">
+                <span class="step-num-badge">${step.step_index}</span>
+                <div>
+                  <strong>${escapeHtml(step.event_type || 'Event')}</strong>
+                  ${step.status ? `<span class="badge badge-mono text-xs" style="margin-left: 6px;">${escapeHtml(step.status)}</span>` : ''}
+                  ${step.timestamp ? `<span class="text-xs text-muted font-mono" style="margin-left: 8px;">${new Date(step.timestamp).toLocaleTimeString()}</span>` : ''}
+                </div>
+              </div>
+              <div>
+                ${step.evidence_id ? `
+                  <button type="button" class="btn btn-ghost btn-xs" onclick="window.jumpToEvidenceRecord('', '${escapeHtml(step.evidence_id)}')" title="Inspect Step Evidence">
+                    View Step Event &rarr;
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // IOC Match context note
+  if (det.category === 'IOC') {
+    html += `
+      <div class="forensic-notice-box" style="margin-top: 6px;">
+        <strong>Forensic Threat Indicator Context:</strong>
+        <p style="margin: 4px 0 0;">${escapeHtml(det.context_note || 'Matches documented threat intelligence indicator.')}</p>
+      </div>
+    `;
+  }
+
+  // Isolation Forest ML context note & features
+  if (det.category === 'ISOLATION_FOREST') {
+    html += `
+      <div style="display: flex; gap: 12px; margin-top: 6px; flex-wrap: wrap;">
+        <div class="summary-meta-item" style="flex: 1; min-width: 140px;">
+          <span class="summary-meta-label">Anomaly Score</span>
+          <span class="summary-meta-value font-mono text-accent"><strong>${det.anomaly_score !== null ? det.anomaly_score.toFixed(2) : '—'}</strong> / 1.00</span>
+        </div>
+        <div class="summary-meta-item" style="flex: 1; min-width: 140px;">
+          <span class="summary-meta-label">Decision Threshold</span>
+          <span class="summary-meta-value font-mono">${typeof det.threshold === 'number' ? det.threshold.toFixed(2) : '95th %ile (Batch)'}</span>
+        </div>
+        <div class="summary-meta-item" style="flex: 1; min-width: 140px;">
+          <span class="summary-meta-label">Model Classification</span>
+          <span class="summary-meta-value"><span class="badge badge-mono">BEHAVIORAL OUTLIER</span></span>
+        </div>
+      </div>
+      <div class="forensic-notice-box notice-ml" style="margin-top: 6px;">
+        <strong>Isolation Forest Statistical Context:</strong>
+        <p style="margin: 4px 0 0;">${escapeHtml(det.ml_note || 'Event classified as outlier based on multidimensional feature partition depths.')}</p>
+      </div>
+    `;
+  }
+
+  content.innerHTML = html;
+}
+
+function renderSupportingEvidenceSection(evidenceList) {
+  const content = document.getElementById('finding-evidence-trace-content');
+  const countBadge = document.getElementById('finding-evidence-count-badge');
+  if (!content) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${evidenceList.length} RECORD${evidenceList.length === 1 ? '' : 'S'}`;
+  }
+
+  if (!evidenceList || evidenceList.length === 0) {
+    content.innerHTML = '<div class="empty-trace-note">No supporting evidence is currently linked to this finding.</div>';
+    return;
+  }
+
+  let html = '';
+  evidenceList.forEach(ev => {
+    html += `
+      <div class="evidence-trace-card">
+        <div class="evidence-trace-header">
+          <div class="evidence-trace-meta">
+            <span class="badge badge-mono">${escapeHtml(ev.event_type)}</span>
+            <span class="font-mono text-xs text-muted">${new Date(ev.timestamp).toLocaleString()}</span>
+            <strong style="font-size: 12px;">${escapeHtml(ev.source_name)}</strong>
+            <span class="badge badge-mono text-xs">Offset #${ev.raw_record_offset}</span>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.jumpToEvidenceRecord('${escapeHtml(ev.source_id)}', '${escapeHtml(ev.id)}')" title="Navigate directly to this record in Evidence Explorer">
+              View Evidence &rarr;
+            </button>
+          </div>
+        </div>
+
+        <div class="evidence-entities-grid">
+          <div class="evidence-entity-item">User: <strong>${escapeHtml(ev.user_id || '—')}</strong></div>
+          <div class="evidence-entity-item">Device: <strong>${escapeHtml(ev.device_id || '—')}</strong></div>
+          <div class="evidence-entity-item">Process: <code class="font-mono">${escapeHtml(ev.process_name || '—')}</code></div>
+          <div class="evidence-entity-item">IP: <code class="font-mono">${escapeHtml(ev.ip_address || '—')}</code></div>
+          <div class="evidence-entity-item">Action / Status: <strong>${escapeHtml(ev.action || '—')} / ${escapeHtml(ev.status || '—')}</strong></div>
+          <div class="evidence-entity-item">File: <span class="font-mono text-xs">${escapeHtml(ev.file_path || ev.file_hash ? (ev.file_path || ev.file_hash).slice(0, 24) + '...' : '—')}</span></div>
+        </div>
+
+        ${ev.sha256_hash ? `
+          <div style="font-size: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; padding-top: 2px;">
+            <span>Source File Ingestion SHA-256 Digest:</span>
+            <code class="font-mono" style="font-size: 10px; color: var(--text-secondary);">${escapeHtml(ev.sha256_hash)}</code>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+
+  content.innerHTML = html;
+}
+
+function renderCorrelatedActivitiesSection(activityList) {
+  const content = document.getElementById('finding-activity-trace-content');
+  const countBadge = document.getElementById('finding-activity-count-badge');
+  if (!content) return;
+
+  if (countBadge) {
+    countBadge.textContent = `${activityList.length} ACTIVIT${activityList.length === 1 ? 'Y' : 'IES'}`;
+  }
+
+  if (!activityList || activityList.length === 0) {
+    content.innerHTML = '<div class="empty-trace-note">No correlated activity is currently associated with this finding.</div>';
+    return;
+  }
+
+  let html = '';
+  activityList.forEach(act => {
+    const reasons = act.correlation_reasons || [];
+    html += `
+      <div class="activity-trace-card" id="activity-trace-${act.id}">
+        <div class="activity-trace-header">
+          <div>
+            <strong style="font-size: 13px;">${escapeHtml(act.title)}</strong>
+            <span class="badge badge-mono text-xs" style="margin-left: 6px;">${escapeHtml(act.activity_type)}</span>
+            <span class="badge badge-open text-xs" style="margin-left: 4px;">${escapeHtml(act.status)}</span>
+          </div>
+          <div>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="window.jumpToActivityRecord('${escapeHtml(act.id)}')" title="Navigate to Activity in Timeline">
+              View Activity &rarr;
+            </button>
+          </div>
+        </div>
+
+        <div style="font-size: 11px; color: var(--text-secondary); display: flex; gap: 14px; flex-wrap: wrap;">
+          <span>Event Count: <strong>${act.evidence_count}</strong></span>
+          <span>Findings Connected: <strong>${act.finding_count}</strong></span>
+          <span>Time Span: <span class="font-mono">${new Date(act.start_time).toLocaleTimeString()} &ndash; ${new Date(act.end_time).toLocaleTimeString()}</span></span>
+        </div>
+
+        ${reasons.length > 0 ? `
+          <div class="activity-reasons-list">
+            <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted);">Correlation Metadata &amp; Connection Basis</span>
+            ${reasons.map(r => `
+              <div class="activity-reason-item">
+                <span class="activity-reason-bullet">&bull;</span>
+                <span>${escapeHtml(r)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+
+  content.innerHTML = html;
+}
+
+function renderPriorityExplanationSection(prio, secondaries) {
+  const content = document.getElementById('finding-priority-trace-content');
+  const srcBadge = document.getElementById('finding-priority-source-badge');
+  if (!content) return;
+
+  if (srcBadge && prio) {
+    srcBadge.textContent = prio.priority_source === 'ACTIVITY'
+      ? 'CONTEXTUAL ACTIVITY TRIAGE'
+      : prio.priority_source === 'ARTIFACT'
+      ? 'BASELINE ARTIFACT TRIAGE'
+      : 'SEVERITY FALLBACK';
+  }
+
+  if (!prio) {
+    content.innerHTML = '<div class="empty-trace-note">Prioritization metadata unavailable.</div>';
+    return;
+  }
+
+  const isFallback = prio.priority_source === 'SEVERITY_FALLBACK' || !prio.has_priority;
+  const factors = prio.factors || [];
+
+  let html = `
+    <div style="padding: 10px 12px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-xs);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="badge ${getFindingTierBadgeClass(prio.priority_tier)}">${prio.priority_tier}</span>
+          <span class="font-mono text-sm" style="font-weight: 700; color: var(--text-primary);">
+            ${typeof prio.priority_score === 'number' ? `${prio.priority_score.toFixed(1)} / 100.0` : 'SCORE: NONE'}
+          </span>
+          <span class="text-xs text-muted">(${prio.priority_source})</span>
+        </div>
+        ${prio.method_type ? `<span class="badge badge-mono text-xs">${escapeHtml(prio.method_type)}</span>` : ''}
+      </div>
+      <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
+        ${escapeHtml(prio.explanation_text || '')}
+      </p>
+    </div>
+  `;
+
+  if (isFallback) {
+    html += `
+      <div class="forensic-notice-box" style="margin-top: 6px;">
+        <strong>Unprioritized Finding Notice:</strong>
+        <p style="margin: 4px 0 0;">
+          Prioritization has not been executed yet for this target. The displayed priority tier is derived directly from the raw detection severity score rather than an automated pipeline prioritization triage calculation.
+        </p>
+      </div>
+    `;
+  } else if (factors.length > 0) {
+    html += `
+      <div style="margin-top: 6px;">
+        <span class="summary-meta-label" style="display: block; margin-bottom: 6px;">Factor Weight Breakdown &amp; Contributions</span>
+        <table class="priority-factors-table">
+          <thead>
+            <tr>
+              <th>Factor Name</th>
+              <th>Configured Weight</th>
+              <th>Normalized Value</th>
+              <th>Score Contribution</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${factors.map(f => `
+              <tr>
+                <td><strong>${escapeHtml(f.name.replace(/_/g, ' '))}</strong></td>
+                <td><span class="badge badge-mono">${(f.weight * 100).toFixed(0)}%</span></td>
+                <td class="font-mono">${f.normalized_value.toFixed(4)}</td>
+                <td class="factor-contrib-val">${f.contribution >= 0 ? '+' : ''}${f.contribution.toFixed(2)} pts</td>
+                <td class="text-muted" style="font-size: 11px;">${escapeHtml(f.description)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  // Display secondary priorities (e.g. artifact-level baseline triage if primary was activity-level)
+  if (secondaries && secondaries.length > 0) {
+    secondaries.forEach(sec => {
+      html += `
+        <div style="margin-top: 8px; padding: 8px 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-xs);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <span class="text-xs" style="font-weight: 600; color: var(--text-secondary);">Baseline Evidence Artifact Priority:</span>
+            <span class="badge ${getFindingTierBadgeClass(sec.priority_tier)} text-xs">${sec.priority_tier} (${sec.priority_score !== null ? sec.priority_score.toFixed(1) : '—'} / 100)</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin: 0;">${escapeHtml(sec.explanation_text || '')}</p>
+        </div>
+      `;
+    });
+  }
+
+  content.innerHTML = html;
+}
+
+window.jumpToActivityRecord = function(activityId) {
+  const analysisTab = document.getElementById('nav-tab-analysis');
+  if (analysisTab) analysisTab.click();
+
+  const targetRow = document.getElementById(`activity-row-${activityId}`) ||
+                    document.getElementById(`activity-trace-${activityId}`);
+  if (targetRow) {
+    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    targetRow.style.outline = '2px solid var(--accent-technical)';
+    setTimeout(() => { targetRow.style.outline = ''; }, 2000);
+  } else {
+    const actTable = document.getElementById('activities-tbody');
+    if (actTable) actTable.scrollIntoView({ behavior: 'smooth' });
+  }
+};
+
+window.copyFindingDetailJson = function(btn) {
+  const pre = document.getElementById('selected-finding-raw-json');
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+};
+
+
+function resetFindingsFilters() {
+  state.findingsState.searchQuery = '';
+  state.findingsState.priorityFilter = '';
+  state.findingsState.methodFilter = '';
+  state.findingsState.activityFilter = '';
+
+  const searchInput = document.getElementById('findings-search-input');
+  if (searchInput) searchInput.value = '';
+  const searchClear = document.getElementById('findings-search-clear');
+  if (searchClear) searchClear.style.display = 'none';
+
+  const prioSelect = document.getElementById('filter-findings-priority');
+  if (prioSelect) prioSelect.value = '';
+
+  const methodSelect = document.getElementById('filter-findings-method');
+  if (methodSelect) methodSelect.value = '';
+
+  const actSelect = document.getElementById('filter-findings-activity');
+  if (actSelect) actSelect.value = '';
+
+  const legacySelect = document.getElementById('filter-finding-type');
+  if (legacySelect) legacySelect.value = '';
+
+  document.querySelectorAll('.summary-metric-card').forEach(c => c.classList.remove('active-metric-filter'));
+
+  applyFindingsFilters();
+}
+
 async function loadFindings() {
   if (!state.activeInvestigationId) return;
   const currentInvId = state.activeInvestigationId;
@@ -2389,37 +3358,22 @@ async function loadFindings() {
   const seq = ++state.requestSeq.findings;
   const tbody = document.getElementById('findings-tbody');
   if (!tbody) return;
-  const ftype = document.getElementById('filter-finding-type').value;
-
-  let query = `/detection/findings?investigation_id=${currentInvId}&limit=100`;
-  if (ftype) query += `&finding_type=${ftype}`;
 
   try {
-    const res = await apiRequest(query);
+    const res = await apiRequest(`/detection/findings?investigation_id=${encodeURIComponent(currentInvId)}&limit=200`);
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return; // Stale guard
-    tbody.innerHTML = '';
-    if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No findings yet. Run "Run Full Analysis Pipeline" to evaluate rules and IOCs.</td></tr>';
-      return;
-    }
-    res.items.forEach(f => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><span class="badge badge-mono">${formatEnum(f.finding_type)}</span></td>
-        <td class="font-mono"><strong>${f.severity.toFixed(2)}</strong></td>
-        <td><strong class="font-mono text-sm">${escapeHtml(f.rule_id || '—')}</strong></td>
-        <td>${f.mitre_tactic ? `<span class="badge badge-mono">${escapeHtml(f.mitre_tactic)} / ${escapeHtml(f.mitre_technique || '')}</span>` : '<span class="text-muted">None specified</span>'}</td>
-        <td style="max-width: 360px; font-size: 11px;">${escapeHtml(f.description || '')}</td>
-        <td class="text-sm">${new Date(f.created_at).toLocaleString()}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewFindingProofModal('${escapeHtml(f.id)}')" title="Inspect verified proof, supporting evidence, and correlations">Inspect Proof</button>
-        </td>
-      `;
-      tbody.appendChild(tr);
-    });
+
+    const items = res.items || [];
+    state.findingsState.rawFindings = items;
+
+    // Update Investigation Summary metrics at top
+    updateFindingsSummaryMetrics(items);
+
+    // Apply active filters and search
+    applyFindingsFilters();
   } catch (err) {
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return;
-    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading findings: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading findings: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 

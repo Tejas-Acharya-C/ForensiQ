@@ -340,3 +340,459 @@ class MLAnomalyService:
 
         if created > 0: db.commit()
         return DetectionSummary(source_id=source_id, status="COMPLETED", evidence_evaluated=len(evidence_list), findings_created=created, findings_reused=reused)
+
+
+# ---------------------------------------------------------
+# Finding Metadata Resolution Helper (Phase 1 Threat Discovery)
+# ---------------------------------------------------------
+
+_RULE_METADATA_CACHE: Optional[Dict[str, Dict[str, Any]]] = None
+
+def get_rules_lookup() -> Dict[str, Dict[str, Any]]:
+    """Build and cache a lookup dictionary of known detection rules by rule ID."""
+    global _RULE_METADATA_CACHE
+    if _RULE_METADATA_CACHE is not None:
+        return _RULE_METADATA_CACHE
+
+    catalog: Dict[str, Dict[str, Any]] = {
+        "IOC-IP-001": {
+            "name": "Known Malicious IP Match",
+            "type": "IOC_MATCH",
+            "method": "Rule-based (IOC Match)",
+        },
+        "IOC-HASH-001": {
+            "name": "Known Malicious File Hash Match",
+            "type": "IOC_MATCH",
+            "method": "Rule-based (IOC Match)",
+        },
+        "RULE-PROC-001": {
+            "name": "Suspicious PowerShell Execution",
+            "type": "FIELD_MATCH",
+            "method": "Rule-based (Deterministic)",
+        },
+        "RULE-AUTH-SEQ-001": {
+            "name": "Repeated Failed Logins Followed by Success",
+            "type": "SEQUENCE",
+            "method": "Rule-based (Sequence Detection)",
+        },
+        "RULE-PROC-002": {
+            "name": "Mimikatz Execution",
+            "type": "FIELD_MATCH",
+            "method": "Rule-based (Deterministic)",
+        },
+    }
+
+    try:
+        service = DetectionService()
+        for r in service.rules:
+            rid = r.get("id")
+            if rid:
+                rtype = r.get("type", "FIELD_MATCH")
+                if rtype == "SEQUENCE":
+                    method = "Rule-based (Sequence Detection)"
+                elif rtype == "IOC_MATCH":
+                    method = "Rule-based (IOC Match)"
+                else:
+                    method = "Rule-based (Deterministic)"
+                catalog[rid] = {
+                    "name": r.get("name", rid),
+                    "type": rtype,
+                    "method": method,
+                }
+    except Exception as exc:
+        logger.warning(f"Could not dynamically populate rules catalog: {exc}")
+
+    _RULE_METADATA_CACHE = catalog
+    return _RULE_METADATA_CACHE
+
+
+def resolve_finding_metadata(
+    rule_id: Optional[str],
+    finding_type: str,
+    description: Optional[str] = None,
+    optional_mitre_tags: Any = None,
+) -> Dict[str, Optional[str]]:
+    """Derive human-readable title, rule name, and detection method without modifying original data."""
+    clean_type = (finding_type or "").upper()
+    lookup = get_rules_lookup()
+
+    # 1. ML Anomaly signal
+    if clean_type == "ML_ANOMALY" or (rule_id and "isolation_forest" in rule_id.lower()):
+        return {
+            "title": "Behavioral Anomaly (Isolation Forest)",
+            "rule_name": "Isolation Forest Anomaly Detection",
+            "detection_method": "Machine Learning (Isolation Forest)",
+        }
+
+    # 2. Rule-based or IOC match with rule_id
+    base_rule_id = None
+    if rule_id:
+        base_rule_id = rule_id.split(":")[0].strip()
+
+    if base_rule_id and base_rule_id in lookup:
+        entry = lookup[base_rule_id]
+        return {
+            "title": entry["name"],
+            "rule_name": entry["name"],
+            "detection_method": entry["method"],
+        }
+
+    # 3. Fallback title derivation
+    detection_method = "Rule-based (Deterministic)"
+    if clean_type == "IOC_MATCH":
+        detection_method = "Rule-based (IOC Match)"
+    elif clean_type == "ML_ANOMALY":
+        detection_method = "Machine Learning (Isolation Forest)"
+
+    rule_name = base_rule_id or rule_id
+
+    # Try extracting human title from description if available
+    title = None
+    if description:
+        m = re.match(r"^Rule\s+['\"]([^'\"]+)['\"]\s+matched", description)
+        if m:
+            title = m.group(1)
+        elif description.startswith("Sequence '") and "' matched" in description:
+            m_seq = re.search(r"Sequence\s+['\"]([^'\"]+)['\"]\s+matched", description)
+            if m_seq:
+                title = m_seq.group(1)
+
+    if not title:
+        if base_rule_id:
+            # Clean up identifier (e.g. RULE-PROC-001 -> Rule Proc 001)
+            title = base_rule_id.replace("_", " ").replace("-", " ").title()
+        elif description:
+            # First clause/sentence
+            first_sentence = description.split(".")[0].strip()
+            title = (first_sentence[:60] + "...") if len(first_sentence) > 60 else first_sentence
+        else:
+            title = f"{clean_type.replace('_', ' ').title()} Finding"
+
+    return {
+        "title": title,
+        "rule_name": rule_name or title,
+        "detection_method": detection_method,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Finding Explanation Builders
+# ---------------------------------------------------------------------------
+
+_LOADED_RULES_DICT: Optional[Dict[str, Dict[str, Any]]] = None
+
+def get_loaded_rules_dict() -> Dict[str, Dict[str, Any]]:
+    """Cache and return full rule dictionary definitions keyed by rule ID."""
+    global _LOADED_RULES_DICT
+    if _LOADED_RULES_DICT is not None:
+        return _LOADED_RULES_DICT
+
+    rules_by_id: Dict[str, Dict[str, Any]] = {}
+    try:
+        service = DetectionService()
+        for r in service.rules:
+            rid = r.get("id")
+            if rid:
+                rules_by_id[rid] = r
+    except Exception as exc:
+        logger.warning(f"Could not load rules dictionary: {exc}")
+
+    _LOADED_RULES_DICT = rules_by_id
+    return _LOADED_RULES_DICT
+
+
+def get_raw_rule_definition(rule_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Retrieve original configured rule definition by full or base rule ID."""
+    if not rule_id:
+        return None
+    base_id = rule_id.split(":")[0].strip()
+    return get_loaded_rules_dict().get(base_id)
+
+
+def build_detection_explanation(
+    finding: Finding,
+    evidence_items: Optional[Sequence[Evidence]] = None,
+) -> Any:
+    """Build transparent, evidence-backed DetectionExplanation DTO for a Finding."""
+    from app.schemas.finding import (
+        DetectionExplanation,
+        ConditionMatchDetail,
+        SequenceStepDetail,
+    )
+
+    clean_type = (finding.finding_type or "").upper()
+    evidence_list = list(evidence_items or [])
+    mitre_tags = finding.optional_mitre_tags if isinstance(finding.optional_mitre_tags, dict) else {}
+
+    # 1. MACHINE LEARNING (Isolation Forest)
+    if clean_type == "ML_ANOMALY" or (finding.rule_id and "isolation_forest" in finding.rule_id.lower()):
+        anomaly_score = mitre_tags.get("anomaly_score", round(finding.severity_score, 2))
+        try:
+            anomaly_score = float(anomaly_score)
+        except (ValueError, TypeError):
+            anomaly_score = round(finding.severity_score, 2)
+
+        # Retrieve threshold if persisted in metadata; otherwise None (batch 95th percentile cut-off is unpersisted)
+        raw_threshold = mitre_tags.get("threshold") or mitre_tags.get("anomaly_threshold")
+        threshold = None
+        if raw_threshold is not None:
+            try:
+                threshold = float(raw_threshold)
+            except (ValueError, TypeError):
+                threshold = None
+
+        is_anomaly = (anomaly_score >= threshold) if threshold is not None else True
+
+        features_evaluated = [
+            {
+                "feature_name": "user_activity_frequency",
+                "description": "Normalized event frequency for the principal user across the observation window",
+            },
+            {
+                "feature_name": "inter_arrival_time_delta",
+                "description": "Log10 temporal interval between successive events from identical user and host",
+            },
+            {
+                "feature_name": "error_status_indicator",
+                "description": "Binary flag indicating authentication failure or error status code",
+            },
+            {
+                "feature_name": "diurnal_cycle_sin",
+                "description": "Harmonic cyclical transformation of timestamp hour into diurnal coordinates",
+            },
+        ]
+
+        # Extract actual observed feature values from the first linked evidence item if available
+        matched_attributes = {}
+        if evidence_list:
+            ev = evidence_list[0]
+            matched_attributes = {
+                "user_id": ev.user_id,
+                "device_id": ev.device_id,
+                "event_type": ev.event_type,
+                "status": ev.status,
+                "timestamp": ev.timestamp.isoformat() if ev.timestamp else None,
+            }
+
+        thresh_str = f"(threshold: {threshold:.2f})" if threshold is not None else "(classified above 95th percentile batch cut-off)"
+        return DetectionExplanation(
+            category="ISOLATION_FOREST",
+            summary=f"Event was flagged as an outlier by Isolation Forest with an anomaly score of {anomaly_score:.2f} {thresh_str}.",
+            model_name="Isolation Forest Anomaly Detection",
+            rule_id=finding.rule_id,
+            rule_name="Isolation Forest Anomaly Detection",
+            rule_description="Unsupervised isolation forest model detecting statistical outliers across multidimensional behavioral event features.",
+            rule_version="1.0.0",
+            anomaly_score=anomaly_score,
+            threshold=threshold,
+            is_anomaly=is_anomaly,
+            features_evaluated=features_evaluated,
+            matched_attributes=matched_attributes,
+            ml_note="Isolation Forest detects unusual statistical observations across high-dimensional feature distributions. An outlier score signifies statistical divergence from baseline patterns; it does not independently establish malicious intent or confirm a cyberattack.",
+        )
+
+    # 2. RULE-BASED & IOC DETECTION
+    raw_rule = get_raw_rule_definition(finding.rule_id)
+    rule_type = raw_rule.get("type", "FIELD_MATCH") if raw_rule else ("IOC_MATCH" if clean_type == "IOC_MATCH" else "FIELD_MATCH")
+    rule_id_str = raw_rule.get("id", finding.rule_id) if raw_rule else finding.rule_id
+    rule_name = raw_rule.get("name") if raw_rule else (finding.rule_id or "Configured Rule")
+    rule_desc = raw_rule.get("description") if raw_rule else finding.description
+    rule_ver = str(raw_rule.get("version", "1.0.0")) if raw_rule else "1.0.0"
+
+    # 2A. SEQUENCE DETECTION
+    if rule_type == "SEQUENCE" or (raw_rule and "sequence" in raw_rule):
+        seq_cfg = raw_rule.get("sequence", {}) if raw_rule else {}
+        group_by = seq_cfg.get("group_by", "user_id")
+        max_span = seq_cfg.get("max_span_seconds", 300)
+        steps_cfg = seq_cfg.get("sequence_steps", [])
+
+        # Sort evidence chronologically
+        sorted_ev = sorted(
+            evidence_list,
+            key=lambda e: (e.timestamp.timestamp() if e.timestamp else 0.0, e.raw_record_offset or 0),
+        )
+
+        group_val = None
+        actual_span = 0.0
+        if sorted_ev:
+            group_val = str(getattr(sorted_ev[0], group_by, None) or "")
+            if len(sorted_ev) >= 2 and sorted_ev[0].timestamp and sorted_ev[-1].timestamp:
+                actual_span = round(abs((sorted_ev[-1].timestamp - sorted_ev[0].timestamp).total_seconds()), 2)
+
+        sequence_step_details = []
+        for idx, step_item in enumerate(steps_cfg):
+            ev_for_step = sorted_ev[idx] if idx < len(sorted_ev) else None
+            cond_list = []
+            if isinstance(step_item, dict) and "conditions" in step_item:
+                raw_conds = step_item["conditions"]
+            elif isinstance(step_item, list):
+                raw_conds = step_item
+            elif isinstance(step_item, dict):
+                raw_conds = [step_item]
+            else:
+                raw_conds = []
+
+            for c in raw_conds:
+                f_name = c.get("field", "")
+                op = c.get("operator", "")
+                exp_v = c.get("value")
+                act_v = get_evidence_field_value(ev_for_step, f_name) if ev_for_step else None
+                cond_list.append(
+                    ConditionMatchDetail(
+                        field=f_name,
+                        operator=op,
+                        expected_value=exp_v,
+                        actual_value=str(act_v) if act_v is not None else None,
+                        matched=evaluate_condition(ev_for_step, c) if ev_for_step else False,
+                    )
+                )
+
+            sequence_step_details.append(
+                SequenceStepDetail(
+                    step_index=idx + 1,
+                    event_type=ev_for_step.event_type if ev_for_step else None,
+                    status=ev_for_step.status if ev_for_step else None,
+                    conditions=cond_list,
+                    evidence_id=ev_for_step.id if ev_for_step else None,
+                    timestamp=ev_for_step.timestamp if ev_for_step else None,
+                    matched=True if ev_for_step else False,
+                )
+            )
+
+        summary = (
+            f"Sequence rule '{rule_name}' matched across {len(sorted_ev)} ordered event(s) "
+            f"grouped by {group_by}='{group_val}' spanning {actual_span:.1f}s (window limit: {max_span}s)."
+        )
+
+        return DetectionExplanation(
+            category="SEQUENCE",
+            summary=summary,
+            rule_id=rule_id_str,
+            rule_name=rule_name,
+            rule_description=rule_desc,
+            rule_version=rule_ver,
+            sequence_group_by=group_by,
+            sequence_group_value=group_val,
+            max_span_seconds=max_span,
+            actual_span_seconds=actual_span,
+            sequence_steps=sequence_step_details,
+        )
+
+    # 2B. IOC MATCH
+    if rule_type == "IOC_MATCH" or clean_type == "IOC_MATCH":
+        cond = raw_rule.get("conditions", {}) if raw_rule else {}
+        field = cond.get("field", "indicator") if isinstance(cond, dict) else "indicator"
+        op = cond.get("operator", "equals") if isinstance(cond, dict) else "equals"
+        target_val = cond.get("value") if isinstance(cond, dict) else None
+
+        # Determine IOC type
+        ioc_type = "UNKNOWN"
+        if "ip" in field.lower():
+            ioc_type = "IP_ADDRESS"
+        elif "hash" in field.lower():
+            ioc_type = "FILE_HASH"
+        elif "domain" in field.lower():
+            ioc_type = "DOMAIN"
+        elif "url" in field.lower():
+            ioc_type = "URL"
+
+        # Check against first evidence
+        actual_val = None
+        matched_attrs = {}
+        if evidence_list:
+            ev = evidence_list[0]
+            actual_val = get_evidence_field_value(ev, field)
+            matched_attrs = {
+                "ip_address": ev.ip_address,
+                "file_hash": ev.file_hash,
+                "file_path": ev.file_path,
+                "event_type": ev.event_type,
+            }
+
+        cond_match = [
+            ConditionMatchDetail(
+                field=field,
+                operator=op,
+                expected_value=target_val,
+                actual_value=str(actual_val) if actual_val is not None else None,
+                matched=True,
+            )
+        ] if target_val is not None else []
+
+        val_display = str(actual_val or target_val or "indicator")
+        summary = f"Event matches known threat indicator ({ioc_type}: {val_display}) defined in rule {rule_id_str}."
+
+        return DetectionExplanation(
+            category="IOC",
+            summary=summary,
+            rule_id=rule_id_str,
+            rule_name=rule_name,
+            rule_description=rule_desc,
+            rule_version=rule_ver,
+            indicator_type=ioc_type,
+            matched_value=val_display,
+            indicator_source=rule_name,
+            matched_conditions=cond_match,
+            matched_attributes=matched_attrs,
+            context_note="An IOC match confirms an exact pattern match against a documented indicator of compromise from configured threat intelligence. It indicates that the observed artifact matches threat criteria, but does not independently establish breach impact without contextual corroboration.",
+        )
+
+    # 2C. STANDARD DETERMINISTIC FIELD MATCH
+    cond = raw_rule.get("conditions", {}) if raw_rule else {}
+    cond_matches = []
+    matched_attrs = {}
+
+    if isinstance(cond, dict) and cond:
+        field = cond.get("field", "")
+        op = cond.get("operator", "equals")
+        val = cond.get("value")
+        actual_val = None
+        if evidence_list:
+            actual_val = get_evidence_field_value(evidence_list[0], field)
+            matched_attrs[field] = actual_val
+        cond_matches.append(
+            ConditionMatchDetail(
+                field=field,
+                operator=op,
+                expected_value=val,
+                actual_value=str(actual_val) if actual_val is not None else None,
+                matched=True,
+            )
+        )
+    elif isinstance(cond, list):
+        for c in cond:
+            f_name = c.get("field", "")
+            actual_val = get_evidence_field_value(evidence_list[0], f_name) if evidence_list else None
+            if actual_val is not None:
+                matched_attrs[f_name] = actual_val
+            cond_matches.append(
+                ConditionMatchDetail(
+                    field=f_name,
+                    operator=c.get("operator", "equals"),
+                    expected_value=c.get("value"),
+                    actual_value=str(actual_val) if actual_val is not None else None,
+                    matched=True,
+                )
+            )
+
+    cond_details_str = ""
+    if cond_matches:
+        parts = [f"{c.field} {c.operator} '{c.actual_value or c.expected_value}'" for c in cond_matches if c.matched]
+        if parts:
+            cond_details_str = f" ({', '.join(parts)})"
+
+    summary = (
+        f"Deterministic detection rule '{rule_name}' was triggered because "
+        f"configured attribute condition(s) were satisfied{cond_details_str}."
+    )
+
+    return DetectionExplanation(
+        category="RULE_BASED",
+        summary=summary,
+        rule_id=rule_id_str,
+        rule_name=rule_name,
+        rule_description=rule_desc,
+        rule_version=rule_ver,
+        matched_conditions=cond_matches,
+        matched_attributes=matched_attrs,
+    )

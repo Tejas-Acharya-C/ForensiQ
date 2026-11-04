@@ -575,34 +575,113 @@
           </div>
         </div>
 
-        <!-- Section 2: Detected Findings & Forensic Findings -->
+        <!-- Section 2: Threat Discovery & Forensic Findings -->
         <div class="card panel" style="margin-bottom: 20px;">
-          <div class="panel-header">
-            <div>
-              <h3>Detected Findings &amp; Forensic Traceability</h3>
-              <span class="text-sm text-muted">Deterministic rule detections, IOC matches, and behavioral anomalies with MITRE ATT&amp;CK mappings</span>
-            </div>
-            <div class="filter-controls">
-              <label for="filter-finding-type" class="visually-hidden">Finding Type Filter</label>
-              <select id="filter-finding-type" class="form-control-sm">
-                <option value="">All Finding Types</option>
-                <option value="RULE_MATCH">Rule Match</option>
-                <option value="IOC_MATCH">IOC Match</option>
-                <option value="ML_ANOMALY">ML Anomaly</option>
-              </select>
+          <!-- Investigation Summary Metrics -->
+          <div class="findings-summary-header">
+            <div class="findings-summary-grid">
+              <div class="summary-metric-card" id="metric-card-total" title="Total analytical findings identified in this case">
+                <div class="summary-metric-label">Total Findings</div>
+                <div class="summary-metric-value" id="findings-count-total">0</div>
+                <div class="summary-metric-subtext">Active case detections</div>
+              </div>
+              <div class="summary-metric-card metric-card-critical" id="metric-card-high" title="Critical and High priority findings">
+                <div class="summary-metric-label">High Priority</div>
+                <div class="summary-metric-value" id="findings-count-high">0</div>
+                <div class="summary-metric-subtext">Critical &amp; High tier</div>
+              </div>
+              <div class="summary-metric-card metric-card-medium" id="metric-card-medium" title="Medium priority findings">
+                <div class="summary-metric-label">Medium Priority</div>
+                <div class="summary-metric-value" id="findings-count-medium">0</div>
+                <div class="summary-metric-subtext">Moderate concern</div>
+              </div>
+              <div class="summary-metric-card metric-card-low" id="metric-card-low" title="Low and informational priority findings">
+                <div class="summary-metric-label">Low Priority</div>
+                <div class="summary-metric-value" id="findings-count-low">0</div>
+                <div class="summary-metric-subtext">Low &amp; Informational</div>
+              </div>
             </div>
           </div>
+
+          <div class="panel-header" style="flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--border-subtle); padding-top: 16px;">
+            <div>
+              <h3 style="margin-bottom: 2px;">Threat Discovery &amp; Forensic Findings</h3>
+              <span class="text-sm text-muted">Prioritized security threats, detection methods, evidence records, and correlated activities</span>
+            </div>
+          </div>
+
+          <!-- Practical Search and Filters Toolbar -->
+          <div class="findings-toolbar">
+            <div class="findings-search-group">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="findings-search-input" class="form-control-sm findings-search-field" placeholder="Search by title, description, rule, finding or evidence ID..." aria-label="Search findings">
+              <button id="findings-search-clear" class="btn btn-ghost btn-xs btn-clear-search" style="display: none;" title="Clear search query" aria-label="Clear search">✕</button>
+            </div>
+
+            <div class="findings-filter-group">
+              <!-- Priority Filter -->
+              <div class="filter-field">
+                <label for="filter-findings-priority" class="filter-label">Priority</label>
+                <select id="filter-findings-priority" class="form-control-sm" aria-label="Filter by priority">
+                  <option value="">All Priorities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                  <option value="INFORMATIONAL">Informational</option>
+                </select>
+              </div>
+
+              <!-- Detection Method Filter -->
+              <div class="filter-field">
+                <label for="filter-findings-method" class="filter-label">Detection Method</label>
+                <select id="filter-findings-method" class="form-control-sm" aria-label="Filter by detection method">
+                  <option value="">All Methods</option>
+                  <option value="RULE">Rule-based (All)</option>
+                  <option value="DETERMINISTIC">Deterministic Rule</option>
+                  <option value="SEQUENCE">Sequence Detection</option>
+                  <option value="IOC">Threat IOC Match</option>
+                  <option value="ML">Machine Learning (Isolation Forest)</option>
+                </select>
+                <!-- Backwards-compatibility shim for legacy scripts -->
+                <input type="hidden" id="filter-finding-type" value="">
+              </div>
+
+              <!-- Activity Availability Filter -->
+              <div class="filter-field">
+                <label for="filter-findings-activity" class="filter-label">Activity</label>
+                <select id="filter-findings-activity" class="form-control-sm" aria-label="Filter by activity correlation">
+                  <option value="">All Linkages</option>
+                  <option value="CORRELATED">Correlated with Activity</option>
+                  <option value="UNCORRELATED">Uncorrelated Only</option>
+                </select>
+              </div>
+
+              <!-- Reset Filters -->
+              <button id="btn-reset-findings-filters" class="btn btn-secondary btn-sm" title="Clear all search keywords and reset filters to default">
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Filter Pill Indicator -->
+          <div id="findings-filter-status" class="findings-filter-status" style="display: none;">
+            <span class="text-xs text-muted" id="findings-match-count">Showing 0 matching findings</span>
+            <button id="btn-clear-active-filters" class="btn btn-ghost btn-xs text-accent" style="padding: 0 4px;">Clear filters</button>
+          </div>
+
+          <!-- Findings Table -->
           <div class="table-responsive">
-            <table class="forensic-table">
+            <table class="forensic-table" id="findings-table">
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Severity</th>
-                  <th>Rule / IOC ID</th>
-                  <th>MITRE Mapping</th>
-                  <th>Description</th>
-                  <th>Timestamp</th>
-                  <th style="width: 110px;">Proof &amp; Actions</th>
+                  <th style="width: 110px;">Priority</th>
+                  <th>Threat / Finding Title</th>
+                  <th style="width: 170px;">Detection Method</th>
+                  <th style="width: 150px;">Supporting Evidence</th>
+                  <th style="width: 150px;">Related Activity</th>
+                  <th style="width: 140px;">Detected At</th>
+                  <th style="width: 100px; text-align: center;">Actions</th>
                 </tr>
               </thead>
               <tbody id="findings-tbody">
@@ -611,6 +690,143 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- Finding Investigation & Explanation Panel (Selected State - Phase 2) -->
+          <div id="selected-finding-summary-card" class="selected-finding-summary-card" style="display: none;" role="region" aria-label="Selected Finding Investigation Panel">
+            <!-- 1. Header & Actions -->
+            <div class="summary-card-header">
+              <div class="summary-card-title-group">
+                <span class="summary-card-kicker">Finding Investigation &amp; Traceability</span>
+                <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+                  <h4 id="selected-finding-title" class="summary-card-title">Finding Title</h4>
+                  <span class="meta-chunk font-mono text-xs text-muted" id="selected-finding-id-display">ID: --</span>
+                </div>
+                <div class="summary-card-badges">
+                  <span id="selected-finding-prio-badge" class="badge">PRIORITY</span>
+                  <span id="selected-finding-method-badge" class="badge badge-mono">METHOD</span>
+                  <span id="selected-finding-severity-badge" class="badge badge-mono">SEVERITY: --</span>
+                  <span id="selected-finding-status-badge" class="badge badge-open">ACTIVE</span>
+                </div>
+              </div>
+              <div class="summary-card-actions">
+                <button id="btn-selected-finding-inspect" class="btn btn-secondary btn-sm" title="Open complete proof modal">
+                  Inspect Raw Proof &amp; JSON
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. Investigation Traceability Chain -->
+            <div class="finding-panel-section" style="padding-bottom: 4px;">
+              <div class="finding-section-title">
+                <span class="section-title-icon">🔗</span>
+                <span>Investigation Traceability Chain</span>
+                <span class="text-xs text-muted font-normal">(Evidence &rarr; Finding &rarr; Activity &rarr; Priority)</span>
+              </div>
+              <div class="finding-chain-track" id="finding-chain-track">
+                <div class="text-muted text-xs">Loading investigation chain...</div>
+              </div>
+            </div>
+
+            <!-- 3. Threat Overview -->
+            <div class="summary-card-body">
+              <div class="summary-meta-grid">
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Detection Rule / Model</span>
+                  <span class="summary-meta-value font-mono" id="selected-finding-rule">--</span>
+                </div>
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Detection Method</span>
+                  <span class="summary-meta-value" id="selected-finding-method-detail">--</span>
+                </div>
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">MITRE ATT&amp;CK</span>
+                  <span class="summary-meta-value font-mono" id="selected-finding-mitre">--</span>
+                </div>
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Detected At</span>
+                  <span class="summary-meta-value font-mono" id="selected-finding-timestamp">--</span>
+                </div>
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Correlated Activity</span>
+                  <span class="summary-meta-value" id="selected-finding-activity">None (Uncorrelated)</span>
+                </div>
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Supporting Evidence</span>
+                  <span class="summary-meta-value" id="selected-finding-evidence">--</span>
+                </div>
+              </div>
+              <div class="summary-desc-box">
+                <span class="summary-meta-label">Threat Description</span>
+                <p id="selected-finding-desc" class="summary-desc-text">--</p>
+              </div>
+            </div>
+
+            <!-- 4. Why Was This Detected? -->
+            <div class="finding-panel-section" id="finding-section-why">
+              <div class="finding-section-title">
+                <span class="section-title-icon">🔍</span>
+                <span>Why Was This Detected?</span>
+                <span class="badge badge-mono text-xs" id="finding-why-category-badge">DETECTION LOGIC</span>
+              </div>
+              <div id="finding-why-detected-content" class="finding-section-content">
+                <div class="text-muted text-xs">Loading detection explanation...</div>
+              </div>
+            </div>
+
+            <!-- 5. Supporting Evidence Traceability -->
+            <div class="finding-panel-section" id="finding-section-evidence">
+              <div class="finding-section-title">
+                <span class="section-title-icon">📄</span>
+                <span>Supporting Evidence Records</span>
+                <span class="badge badge-mono text-xs" id="finding-evidence-count-badge">0 RECORDS</span>
+              </div>
+              <div id="finding-evidence-trace-content" class="finding-section-content">
+                <div class="text-muted text-xs">Loading supporting evidence...</div>
+              </div>
+            </div>
+
+            <!-- 6. Correlated Activity Threads -->
+            <div class="finding-panel-section" id="finding-section-activity">
+              <div class="finding-section-title">
+                <span class="section-title-icon">⚡</span>
+                <span>Correlated Activity Threads</span>
+                <span class="badge badge-mono text-xs" id="finding-activity-count-badge">0 ACTIVITIES</span>
+              </div>
+              <div id="finding-activity-trace-content" class="finding-section-content">
+                <div class="text-muted text-xs">Loading correlated activities...</div>
+              </div>
+            </div>
+
+            <!-- 7. Priority Explanation & Factor Breakdown -->
+            <div class="finding-panel-section" id="finding-section-priority">
+              <div class="finding-section-title">
+                <span class="section-title-icon">⚖️</span>
+                <span>Priority Determination &amp; Factor Breakdown</span>
+                <span class="badge badge-mono text-xs" id="finding-priority-source-badge">PRIORITY TRIAGE</span>
+              </div>
+              <div id="finding-priority-trace-content" class="finding-section-content">
+                <div class="text-muted text-xs">Loading priority determination...</div>
+              </div>
+            </div>
+
+            <!-- 8. Technical Details (Expandable) -->
+            <details class="advanced-pipeline-details" id="finding-technical-details" style="margin-top: 4px;">
+              <summary class="advanced-pipeline-summary" style="font-size: 11px;">
+                <span>Advanced: Raw Detection Fingerprint &amp; Attributes</span>
+                <span class="advanced-chevron">▼</span>
+              </summary>
+              <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+                <div class="summary-meta-item">
+                  <span class="summary-meta-label">Detection SHA-256 Fingerprint</span>
+                  <span class="summary-meta-value font-mono text-xs" id="selected-finding-fingerprint">--</span>
+                </div>
+                <div class="raw-json-viewer" style="margin-top: 6px;">
+                  <button type="button" class="btn btn-secondary btn-xs btn-copy-json" onclick="copyFindingDetailJson(this)">Copy JSON</button>
+                  <pre id="selected-finding-raw-json" class="font-mono text-xs" style="max-height: 200px; overflow-y: auto;">{}</pre>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 

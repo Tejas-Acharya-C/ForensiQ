@@ -1868,3 +1868,725 @@ a:focus-visible,
     align-items: flex-start;
   }
 }
+
+/* ==========================================================================
+   Threat Discovery Interface (Phase 1)
+   ========================================================================== */
+.findings-summary-header {
+  padding: 12px 14px 16px;
+}
+
+.findings-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.summary-metric-card {
+  background-color: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.summary-metric-card:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-active);
+}
+
+.summary-metric-card.active-metric-filter {
+  border-color: var(--accent-primary);
+  background-color: rgba(88, 166, 255, 0.08);
+}
+
+.summary-metric-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.summary-metric-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.summary-metric-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.metric-card-critical .summary-metric-value {
+  color: var(--prio-critical);
+}
+
+.metric-card-medium .summary-metric-value {
+  color: var(--prio-medium);
+}
+
+.metric-card-low .summary-metric-value {
+  color: var(--prio-low);
+}
+
+/* Findings Toolbar: Search & Practical Filters */
+.findings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--bg-raised);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.findings-search-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 260px;
+  max-width: 480px;
+}
+
+.findings-search-group .search-icon {
+  position: absolute;
+  left: 10px;
+  font-size: 12px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.findings-search-field {
+  width: 100%;
+  padding-left: 30px !important;
+  padding-right: 28px !important;
+  background-color: var(--bg-canvas) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+}
+
+.findings-search-field:focus {
+  border-color: var(--border-focus) !important;
+  outline: none;
+}
+
+.btn-clear-search {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 0 4px !important;
+  color: var(--text-muted) !important;
+}
+
+.findings-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filter-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.findings-filter-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(88, 166, 255, 0.05);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Findings Table Rows & Interactive States */
+.finding-row {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.1s ease;
+}
+
+.finding-row:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+
+.finding-row.row-selected {
+  background-color: rgba(31, 111, 235, 0.16) !important;
+  border-left: 3px solid var(--action-primary);
+}
+
+.finding-row.row-selected td {
+  color: #ffffff;
+}
+
+.finding-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.finding-primary-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.finding-rule-subtext {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.finding-evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+
+/* Selected Finding Summary Card */
+.selected-finding-summary-card {
+  margin: 16px 14px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-active);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+}
+
+.summary-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-card-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent-technical);
+}
+
+.summary-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.summary-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.summary-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.summary-meta-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.summary-meta-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.summary-desc-box {
+  padding: 10px 12px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-desc-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Priority Badges */
+.badge-tier-critical {
+  background-color: var(--prio-critical-bg);
+  color: var(--prio-critical);
+  border: 1px solid var(--prio-critical-border);
+}
+
+.badge-tier-high {
+  background-color: var(--prio-high-bg);
+  color: var(--prio-high);
+  border: 1px solid var(--prio-high-border);
+}
+
+.badge-tier-medium {
+  background-color: var(--prio-medium-bg);
+  color: var(--prio-medium);
+  border: 1px solid var(--prio-medium-border);
+}
+
+.badge-tier-low {
+  background-color: var(--prio-low-bg);
+  color: var(--prio-low);
+  border: 1px solid var(--prio-low-border);
+}
+
+.badge-tier-info {
+  background-color: var(--prio-info-bg);
+  color: var(--prio-info);
+  border: 1px solid var(--prio-info-border);
+}
+
+/* -------------------------------------------------------------------------
+   Phase 2: Finding Investigation & Traceability Panel Styles
+   ------------------------------------------------------------------------- */
+
+.finding-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.finding-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 8px;
+}
+
+.section-title-icon {
+  font-size: 13px;
+}
+
+.finding-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Investigation Traceability Chain */
+.finding-chain-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 6px 2px 8px;
+}
+
+.chain-node {
+  flex: 0 0 auto;
+  min-width: 140px;
+  max-width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.15s ease;
+}
+
+.chain-node.interactive-node {
+  cursor: pointer;
+}
+
+.chain-node.interactive-node:hover {
+  border-color: var(--accent-technical);
+  background: var(--bg-secondary);
+  transform: translateY(-1px);
+}
+
+.chain-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.chain-node-type {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.chain-node-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chain-node-sub {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chain-node-evidence {
+  border-left: 3px solid var(--accent-technical);
+}
+
+.chain-node-finding {
+  border-left: 3px solid var(--accent-warning);
+}
+
+.chain-node-activity {
+  border-left: 3px solid #8b5cf6;
+}
+
+.chain-node-priority {
+  border-left: 3px solid #10b981;
+}
+
+.chain-connector {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* Why Was This Detected Boxes */
+.why-summary-banner {
+  padding: 10px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.why-banner-rule {
+  border-left: 3px solid var(--accent-technical);
+}
+
+.why-banner-sequence {
+  border-left: 3px solid #3b82f6;
+}
+
+.why-banner-ioc {
+  border-left: 3px solid var(--accent-warning);
+}
+
+.why-banner-ml {
+  border-left: 3px solid #8b5cf6;
+}
+
+/* Matched Conditions Table */
+.conditions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.conditions-table th {
+  background: var(--bg-secondary);
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.conditions-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.conditions-table tr:last-child td {
+  border-bottom: none;
+}
+
+.condition-matched-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+/* Sequence Steps List */
+.sequence-steps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sequence-step-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+}
+
+.sequence-step-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.step-num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-technical);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Context Notice Box (IOC / ML) */
+.forensic-notice-box {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  line-height: 1.4;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #f59e0b;
+}
+
+.forensic-notice-box.notice-ml {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #a78bfa;
+}
+
+/* Supporting Evidence Card */
+.evidence-trace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.evidence-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.evidence-trace-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.evidence-entities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.evidence-entity-item {
+  color: var(--text-secondary);
+}
+
+.evidence-entity-item strong {
+  color: var(--text-primary);
+}
+
+/* Correlated Activity Card */
+.activity-trace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.activity-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.activity-reasons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.activity-reason-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.activity-reason-bullet {
+  color: var(--accent-technical);
+  font-size: 10px;
+}
+
+/* Priority Factors Breakdown Table */
+.priority-factors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+
+.priority-factors-table th {
+  background: var(--bg-secondary);
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.priority-factors-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.priority-factors-table tr:last-child td {
+  border-bottom: none;
+}
+
+.factor-contrib-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* Empty States */
+.empty-trace-note {
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .findings-summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .evidence-entities-grid {
+    grid-template-columns: 1fr;
+  }
+}
