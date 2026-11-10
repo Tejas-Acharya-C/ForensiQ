@@ -110,11 +110,15 @@ def evaluate_condition(evidence: Evidence, condition: Dict[str, Any]) -> bool:
     if op == "regex":
         return bool(re.search(str(target), str(val), re.IGNORECASE))
     if op == "greater_than":
-        try: return float(val) > float(target)
-        except: return False
+        try:
+            return float(val) > float(target)
+        except (ValueError, TypeError):
+            return False
     if op == "less_than":
-        try: return float(val) < float(target)
-        except: return False
+        try:
+            return float(val) < float(target)
+        except (ValueError, TypeError):
+            return False
 
     return False
 
@@ -225,7 +229,6 @@ class DetectionService:
         return matches
 
     def analyze_source_evidence(self, db: Session, source_id: uuid.UUID) -> DetectionSummary:
-        start_time = time.perf_counter()
         evidence_list = db.query(Evidence).filter_by(source_id=source_id).order_by(Evidence.raw_record_offset).all()
         if not evidence_list:
             return DetectionSummary(source_id=source_id, evidence_evaluated=0, rules_evaluated=0, findings_created=0, status="COMPLETED")
@@ -271,8 +274,14 @@ class DetectionService:
 # ---------------------------------------------------------
 
 class MLAnomalyService:
-    def analyze_source(self, db: Session, source_id: uuid.UUID) -> DetectionSummary:
-        start_time = time.perf_counter()
+    def analyze_source(
+        self,
+        db: Session,
+        source_id: uuid.UUID,
+        contamination: Optional[float] = None,
+        random_seed: Optional[int] = None,
+        threshold_override: Optional[float] = None,
+    ) -> DetectionSummary:
         evidence_list = db.query(Evidence).filter_by(source_id=source_id).order_by(Evidence.timestamp.asc()).all()
         if len(evidence_list) < 10:
             return DetectionSummary(source_id=source_id, status="INSUFFICIENT_DATA", findings_created=0)
@@ -302,8 +311,10 @@ class MLAnomalyService:
 
         X = np.array(features, dtype=float)
 
-        # Simple ML Anomaly Detection using Isolation Forest
-        model = IsolationForest(n_estimators=100, contamination=0.05, random_state=42)
+        # ML Anomaly Detection using Isolation Forest with configurable parameters
+        eff_contamination = contamination if (contamination is not None and 0.0 < contamination <= 0.5) else 0.05
+        eff_seed = random_seed if random_seed is not None else 42
+        model = IsolationForest(n_estimators=100, contamination=eff_contamination, random_state=eff_seed)
         model.fit(X)
         scores = -model.score_samples(X)
         
@@ -311,7 +322,7 @@ class MLAnomalyService:
         if max_score <= min_score: max_score = min_score + 0.1
         
         norm_scores = np.clip((scores - min_score) / (max_score - min_score), 0.0, 1.0)
-        threshold = float(np.percentile(norm_scores, 95))
+        threshold = threshold_override if (threshold_override is not None and 0.0 <= threshold_override <= 1.0) else float(np.percentile(norm_scores, 95))
         
         created, reused = 0, 0
         for i, e in enumerate(evidence_list):

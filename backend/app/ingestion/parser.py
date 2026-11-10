@@ -82,7 +82,7 @@ class CSVParser(BaseEvidenceParser):
                 preview_records=preview_records,
             )
 
-        except UnicodeDecodeError as ude:
+        except UnicodeDecodeError:
             return ValidationResult(is_valid=False, detected_format="CSV", errors=[f"Forensic decoding failed."])
         except Exception as exc:
             return ValidationResult(is_valid=False, detected_format="CSV", errors=[f"CSV structural parsing failed: {str(exc)}"])
@@ -169,7 +169,7 @@ class JSONParser(BaseEvidenceParser):
                 warnings=warnings,
             )
 
-        except UnicodeDecodeError as ude:
+        except UnicodeDecodeError:
             return ValidationResult(is_valid=False, detected_format="JSON", errors=[f"Forensic decoding failed."])
         except Exception as exc:
             return ValidationResult(is_valid=False, detected_format="JSON", errors=[f"JSON syntax validation failed: {str(exc)}"])

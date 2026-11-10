@@ -7,7 +7,7 @@ Returns a dynamically generated PDF. No database writes. No persistent storage.
 import uuid
 import re
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Dict
+from typing import List, Optional, Set, Dict, Tuple
 
 from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import Response

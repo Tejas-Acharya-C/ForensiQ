@@ -168,10 +168,7 @@ class ActivityService:
                     continue # Ignore singletons without findings
 
                 group_evd = [evidence_by_id[eid] for eid in group_ids]
-                group_id_set = set(group_ids)
 
-                internal_rels = [r for r in relationships if r.source_evidence_id in group_id_set and r.target_evidence_id in group_id_set]
-                
                 group_findings_map = {}
                 for eid in group_ids:
                     for f in findings_by_evidence.get(eid, []):

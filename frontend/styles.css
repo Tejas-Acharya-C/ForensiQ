@@ -578,9 +578,7 @@ body.forensic-theme {
    ========================================================================== */
 
 /* Unified Investigation Operations Center */
-.operations-center-card,
-.workflow-guide-card,
-.pipeline-coordinator-card {
+.operations-center-card {
   margin-bottom: 16px;
 }
 
@@ -706,23 +704,6 @@ body.forensic-theme {
   gap: 12px;
 }
 
-.pipeline-status-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.coordinator-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .coordinator-controls {
   display: flex;
   align-items: center;
@@ -819,26 +800,6 @@ details[open] .advanced-chevron {
   to { opacity: 1; }
 }
 
-.stage-chip.chip-done {
-  border-color: rgba(84, 189, 138, 0.4);
-  background: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.stage-chip.chip-done .chip-indicator {
-  color: var(--color-success);
-}
-
-.stage-chip.chip-error {
-  border-color: rgba(225, 109, 115, 0.4);
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
-}
-
-.stage-chip.chip-error .chip-indicator {
-  color: var(--color-danger);
-}
-
 .stage-chip-divider {
   color: var(--color-text-muted);
   opacity: 0.4;
@@ -900,10 +861,6 @@ details[open] .advanced-chevron {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--color-text-muted);
-}
-
-.metric-icon-box {
-  display: none;
 }
 
 .metric-value {
@@ -2850,9 +2807,6 @@ details[open] .advanced-chevron {
   .metrics-grid {
     grid-template-columns: 1fr;
   }
-  .findings-summary-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .findings-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -2864,12 +2818,6 @@ details[open] .advanced-chevron {
     grid-template-columns: 1fr;
   }
   .ces-fields-container {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .findings-summary-grid {
     grid-template-columns: 1fr;
   }
 }

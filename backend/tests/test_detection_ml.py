@@ -135,3 +135,32 @@ def test_ml_anomaly_detection_insufficient_data(app_client: TestClient):
     data = resp.json()
     assert data["status"] == "INSUFFICIENT_DATA"
     assert data["findings_created"] == 0
+
+
+def test_ml_anomaly_detection_custom_parameters(app_client: TestClient):
+    """Verify that custom contamination and threshold parameters in MLAnalysisRequest are respected."""
+    lines = ["timestamp,event_type,user,status"]
+    for i in range(25):
+        lines.append(f"2023-01-01T10:00:{i:02}Z,LOGIN,user{i%3},SUCCESS")
+    lines.append("2023-01-01T03:00:00Z,LOGIN,intruder,FAILED")
+    csv_content = "\n".join(lines).encode("utf-8")
+    inv_id, source_id = setup_evidence(app_client, csv_content)
+
+    payload = {
+        "contamination": 0.1,
+        "random_seed": 123,
+        "threshold": 0.5,
+        "model_override": "isolation_forest",
+    }
+    resp = app_client.post(f"/api/v1/ml/sources/{source_id}/analyze", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "COMPLETED"
+    assert data["evidence_evaluated"] == 26
+    assert isinstance(data["findings_created"], int)
+
+    # Test that invalid model_override returns 400 Bad Request
+    invalid_payload = {"model_override": "unsupported_dnn"}
+    bad_resp = app_client.post(f"/api/v1/ml/sources/{source_id}/analyze", json=invalid_payload)
+    assert bad_resp.status_code == 400
+    assert "Unsupported model override" in bad_resp.json()["detail"]
