@@ -285,14 +285,22 @@ FORENSIQ_APP_DATA_DIR=C:/ForensiQData
 
 ## 16. Database Initialization & Migrations
 
-Initialize or upgrade the SQLite database schema using Alembic:
+The launcher checks the database selected by the current `.env` and environment
+variables. It will not create a missing database or automatically upgrade an
+existing database. To explicitly initialize a new SQLite database in
+development, use:
 ```powershell
-alembic upgrade head
+.\scripts\start.ps1 -InitializeDatabase
 ```
 
-Verify database connectivity and table creation:
+This option is limited to `APP_ENV=development`, an absolute SQLite path, and
+an existing parent directory. Existing databases that are behind the current
+Alembic head are left unchanged; back them up and review the pending migration
+scripts before applying migrations manually.
+
+To check connectivity without changing the database:
 ```powershell
-python scripts/check_db.py
+.\.venv\Scripts\python.exe scripts\check_db.py
 ```
 
 ---
@@ -300,14 +308,16 @@ python scripts/check_db.py
 ## 17. Running the Application
 
 ### Option A: Standard PowerShell Launcher (Recommended)
-Use the included automated startup script, which validates Python, checks the database, runs migrations if necessary, and launches the server:
+Use the included startup script, which uses only `.venv`, validates dependencies
+and application imports, checks the configured database and migration revision,
+and launches the server. It does not automatically migrate existing databases:
 ```powershell
 .\scripts\start.ps1
 ```
 
 ### Option B: Direct Uvicorn Launch
 ```powershell
-uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
+.\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
 ### Option C: Docker Compose

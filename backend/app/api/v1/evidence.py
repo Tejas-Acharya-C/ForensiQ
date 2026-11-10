@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, UploadFile, File, Form, Query, status, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from pydantic import BaseModel, Field
 
 from app.api.deps import check_investigation_access, check_source_access
@@ -18,7 +19,7 @@ from app.models.evidence_source import EvidenceSource
 from app.models.evidence import Evidence
 from app.normalization.service import NormalizationService
 from app.normalization.contracts import BatchNormalizationSummary
-from app.schemas.evidence import EvidenceRead
+from app.schemas.evidence import EvidenceRead, EvidencePositionRead
 from app.schemas.evidence_source import SourceIntegrityResult
 from app.schemas.pagination import PaginatedResponse
 from app.core.errors import NotFoundError, BadRequestError
@@ -332,3 +333,70 @@ def get_evidence_detail(
         raise NotFoundError(f"Evidence with ID '{evidence_id}' not found.")
 
     return _safe_validate_evidence(evd)
+
+
+@router.get(
+    "/{evidence_id}/position",
+    response_model=EvidencePositionRead,
+    status_code=status.HTTP_200_OK,
+    summary="Determine zero-based pagination offset and index of an evidence record",
+)
+def get_evidence_position(
+    evidence_id: uuid.UUID,
+    investigation_id: uuid.UUID = Query(..., description="Investigation ID scoping the query"),
+    limit: int = Query(25, ge=1, le=500),
+    source_id: Optional[uuid.UUID] = Query(None),
+    event_type: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    device_id: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+) -> EvidencePositionRead:
+    """Calculates the exact zero-based pagination offset of a specific evidence record
+    within the chronological evidence stream (ordered by timestamp DESC, id DESC),
+    matching the deterministic pagination contract of GET /evidence.
+    """
+    check_investigation_access(investigation_id, db)
+
+    evd = db.get(Evidence, evidence_id)
+    if not evd or evd.investigation_id != investigation_id:
+        raise NotFoundError(f"Evidence with ID '{evidence_id}' not found in investigation '{investigation_id}'.")
+
+    if source_id is not None and evd.source_id != source_id:
+        raise NotFoundError(f"Evidence with ID '{evidence_id}' does not belong to source '{source_id}'.")
+
+    query = db.query(Evidence).filter(Evidence.investigation_id == investigation_id)
+    if source_id:
+        query = query.filter(Evidence.source_id == source_id)
+    if event_type:
+        query = query.filter(Evidence.event_type == event_type)
+    if user_id:
+        query = query.filter(Evidence.user_id == user_id)
+    if device_id:
+        query = query.filter(Evidence.device_id == device_id)
+
+    total = query.count()
+
+    # Calculate count of records that sort strictly BEFORE this record:
+    # Sorting in list_evidence is: Evidence.timestamp.desc(), Evidence.id.desc()
+    # A record R comes before evd if:
+    # (R.timestamp > evd.timestamp) OR (R.timestamp == evd.timestamp AND R.id > evd.id)
+    index = query.filter(
+        or_(
+            Evidence.timestamp > evd.timestamp,
+            and_(Evidence.timestamp == evd.timestamp, Evidence.id > evd.id),
+        )
+    ).count()
+
+    offset = (index // limit) * limit
+    page = (index // limit) + 1
+
+    return EvidencePositionRead(
+        evidence_id=evd.id,
+        investigation_id=evd.investigation_id,
+        source_id=evd.source_id,
+        index=index,
+        offset=offset,
+        page=page,
+        limit=limit,
+        total=total,
+    )

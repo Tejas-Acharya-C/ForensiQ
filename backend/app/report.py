@@ -299,6 +299,9 @@ class ReportData:
         self.activities:      List[Dict] = []
         self.priority_results:List[Dict] = []
         self.sources:         List[Dict] = []
+        self.investigator_notes: Optional[str] = None
+        self.sections:        Optional[List[str]] = None
+        self.findings_priority_filter: Optional[List[str]] = None
         self.generated_at:    datetime   = datetime.now(timezone.utc)
 
 
@@ -347,184 +350,219 @@ def generate_report_pdf(data: ReportData) -> bytes:
     story.append(Spacer(1, 15 * mm))
 
     # ── EXECUTIVE SUMMARY (Still on Cover Page) ────────────────────────────────
-    story.extend(_section("Executive Overview", s))
-    
-    sm = data.summary
-    overview_text = (
-        f"This report details the forensic triage and automated analysis for Case {case_number}. "
-        f"The investigation ingested {sm.get('total_sources', 0)} evidence sources, extracting "
-        f"{sm.get('total_evidence', 0)} individual records. Automated engines produced "
-        f"{sm.get('total_findings', 0)} findings, {sm.get('total_anomalies', 0)} anomalies, "
-        f"and {sm.get('total_relationships', 0)} forensic correlations, which were subsequently "
-        f"grouped into {sm.get('total_activities', 0)} investigation activities."
-    )
-    story.append(Paragraph(html.escape(overview_text), s["body"]))
+    if not data.sections or "executive_summary" in data.sections:
+        story.extend(_section("Executive Overview", s))
 
-    story.append(Spacer(1, 15 * mm))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER, spaceAfter=4))
-    story.append(Paragraph(
-        "CONFIDENTIAL: This document contains sensitive forensic triage data. "
-        "Do not distribute without authorization.", s["disclaimer"]
-    ))
+        sm = data.summary
+        overview_text = (
+            f"This report details the forensic triage and automated analysis for Case {case_number}. "
+            f"The investigation ingested {sm.get('total_sources', 0)} evidence sources, extracting "
+            f"{sm.get('total_evidence', 0)} individual records. Automated engines produced "
+            f"{sm.get('total_findings', 0)} findings, {sm.get('total_anomalies', 0)} anomalies, "
+            f"and {sm.get('total_relationships', 0)} forensic correlations, which were subsequently "
+            f"grouped into {sm.get('total_activities', 0)} investigation activities."
+        )
+        story.append(Paragraph(html.escape(overview_text), s["body"]))
+
+        story.append(Spacer(1, 15 * mm))
+        story.append(HRFlowable(width="100%", thickness=0.5, color=C_BORDER, spaceAfter=4))
+        story.append(Paragraph(
+            "CONFIDENTIAL: This document contains sensitive forensic triage data. "
+            "Do not distribute without authorization.", s["disclaimer"]
+        ))
     
     # ── PAGE BREAK ──
     from reportlab.platypus import PageBreak
     story.append(PageBreak())
 
+    # ── INVESTIGATOR NOTES & COMMENTARY ───────────────────────────────────────
+    if (not data.sections or "investigator_notes" in data.sections) and data.investigator_notes and data.investigator_notes.strip():
+        story.extend(_section("Investigator Notes & Commentary", s))
+        escaped_notes = html.escape(str(data.investigator_notes).strip()).replace("\n", "<br/>")
+        story.append(Paragraph(escaped_notes, s["body"]))
+        story.append(Spacer(1, 3 * mm))
+        story.append(Paragraph(
+            "Note: This section contains subjective observations and analytical commentary provided by the investigator, "
+            "distinct from automated machine-generated detections.",
+            s["disclaimer"],
+        ))
+
     # ── 2. INVESTIGATION FINDINGS (Page 2) ─────────────────────────────────────
-    story.extend(_section("Priority Assessment", s))
+    if not data.sections or "prioritization" in data.sections:
+        story.extend(_section("Priority Assessment", s))
 
-    tc = sm.get("priority_tier_counts", {})
-    tier_rows = [
-        [_th("Tier", s), _th("Count", s), _th("Description", s)],
-        [_td("CRITICAL",      s), _td(str(tc.get("CRITICAL",0)),      s), _td("Requires immediate investigator action", s)],
-        [_td("HIGH",          s), _td(str(tc.get("HIGH",0)),          s), _td("High-priority review recommended", s)],
-        [_td("MEDIUM",        s), _td(str(tc.get("MEDIUM",0)),        s), _td("Review within normal workflow", s)],
-        [_td("LOW",           s), _td(str(tc.get("LOW",0)),           s), _td("Low urgency — monitor for escalation", s)],
-        [_td("INFORMATIONAL", s), _td(str(tc.get("INFORMATIONAL",0)), s), _td("Background context record", s)],
-    ]
-    tier_extra = [
-        ("TEXTCOLOR",(0,1),(0,1),C_CRITICAL), ("FONTNAME",(0,1),(0,1),"Helvetica-Bold"),
-        ("TEXTCOLOR",(0,2),(0,2),C_HIGH),      ("FONTNAME",(0,2),(0,2),"Helvetica-Bold"),
-        ("TEXTCOLOR",(0,3),(0,3),C_MEDIUM),    ("FONTNAME",(0,3),(0,3),"Helvetica-Bold"),
-        ("TEXTCOLOR",(0,4),(0,4),C_LOW),       ("FONTNAME",(0,4),(0,4),"Helvetica-Bold"),
-        ("TEXTCOLOR",(0,5),(0,5),C_INFO_C),    ("FONTNAME",(0,5),(0,5),"Helvetica-Bold"),
-    ]
-    story.append(_tbl(tier_rows, [40*mm, 20*mm, pw-60*mm], tier_extra))
+        tc = sm.get("priority_tier_counts", {})
+        tier_rows = [
+            [_th("Tier", s), _th("Count", s), _th("Description", s)],
+            [_td("CRITICAL",      s), _td(str(tc.get("CRITICAL",0)),      s), _td("Requires immediate investigator action", s)],
+            [_td("HIGH",          s), _td(str(tc.get("HIGH",0)),          s), _td("High-priority review recommended", s)],
+            [_td("MEDIUM",        s), _td(str(tc.get("MEDIUM",0)),        s), _td("Review within normal workflow", s)],
+            [_td("LOW",           s), _td(str(tc.get("LOW",0)),           s), _td("Low urgency — monitor for escalation", s)],
+            [_td("INFORMATIONAL", s), _td(str(tc.get("INFORMATIONAL",0)), s), _td("Background context record", s)],
+        ]
+        tier_extra = [
+            ("TEXTCOLOR",(0,1),(0,1),C_CRITICAL), ("FONTNAME",(0,1),(0,1),"Helvetica-Bold"),
+            ("TEXTCOLOR",(0,2),(0,2),C_HIGH),      ("FONTNAME",(0,2),(0,2),"Helvetica-Bold"),
+            ("TEXTCOLOR",(0,3),(0,3),C_MEDIUM),    ("FONTNAME",(0,3),(0,3),"Helvetica-Bold"),
+            ("TEXTCOLOR",(0,4),(0,4),C_LOW),       ("FONTNAME",(0,4),(0,4),"Helvetica-Bold"),
+            ("TEXTCOLOR",(0,5),(0,5),C_INFO_C),    ("FONTNAME",(0,5),(0,5),"Helvetica-Bold"),
+        ]
+        story.append(_tbl(tier_rows, [40*mm, 20*mm, pw-60*mm], tier_extra))
 
-    # Top priority results
-    top = data.priority_results[:10]
-    if top:
-        story.append(Spacer(1, 6 * mm))
-        story.append(Paragraph("Top Priority Results", s["label"]))
-        top_rows = [[_th("Tier", s), _th("Score", s), _th("Target", s), _th("Explanation", s)]]
-        for pr in top:
-            top_rows.append([
-                _td(pr.get("priority_tier", ""), s),
-                _td(f"{pr.get('priority_score', 0):.1f}", s),
-                _td(pr.get("target_type", ""), s),
-                _td(pr.get("explanation_text", ""), s),
-            ])
-        story.append(_tbl(top_rows, [25*mm, 15*mm, 25*mm, pw-65*mm]))
+        # Top priority results
+        top = data.priority_results[:10]
+        if top:
+            story.append(Spacer(1, 6 * mm))
+            story.append(Paragraph("Top Priority Results", s["label"]))
+            top_rows = [[_th("Tier", s), _th("Score", s), _th("Target", s), _th("Explanation", s)]]
+            for pr in top:
+                top_rows.append([
+                    _td(pr.get("priority_tier", ""), s),
+                    _td(f"{pr.get('priority_score', 0):.1f}", s),
+                    _td(pr.get("target_type", ""), s),
+                    _td(pr.get("explanation_text", ""), s),
+                ])
+            story.append(_tbl(top_rows, [25*mm, 15*mm, 25*mm, pw-65*mm]))
 
-    story.extend(_section("Key Findings", s))
+    if not data.sections or "findings" in data.sections:
+        story.extend(_section("Key Findings", s))
 
-    if data.findings:
-        f_rows = [[
-            _th("Type", s), _th("Sev.", s), _th("Rule / IOC", s),
-            _th("MITRE", s), _th("Description", s), _th("Evid.", s), _th("Detected", s),
-        ]]
-        for f in data.findings:
-            ftype = _label(f.get("finding_type", ""), FINDING_TYPE_LABELS)
-            ev_count = f.get("evidence_count", len(f.get("evidence_ids", [])))
-            f_rows.append([
-                _td(ftype, s),
-                _td(f"{f.get('severity', 0):.2f}", s),
-                _td(f.get("rule_id", ""), s, mono=True),
-                _td(f.get("mitre_tactic", ""), s),
-                _td(f.get("description", ""), s),
-                _td(str(ev_count), s),
-                _td(_fmt_dt(f.get("created_at")).replace(" UTC",""), s),
-            ])
-        desc_w = pw - (24 + 12 + 32 + 22 + 14 + 26) * mm
-        story.append(_tbl(f_rows, [24*mm, 12*mm, 32*mm, 22*mm, desc_w, 14*mm, 26*mm]))
-    else:
-        story.append(Paragraph("No findings recorded for this investigation.", s["body"]))
+        # Apply priority tier filter if specified
+        findings_to_display = data.findings
+        if data.findings_priority_filter:
+            allowed_tiers = {t.upper().strip() for t in data.findings_priority_filter}
+            findings_to_display = [
+                f for f in data.findings
+                if (f.get("priority_tier") or "INFORMATIONAL").upper() in allowed_tiers
+            ]
+
+        if findings_to_display:
+            f_rows = [[
+                _th("Type", s), _th("Sev.", s), _th("Rule / IOC", s),
+                _th("MITRE", s), _th("Description", s), _th("Evid.", s), _th("Detected", s),
+            ]]
+            for f in findings_to_display:
+                ftype = _label(f.get("finding_type", ""), FINDING_TYPE_LABELS)
+                ev_count = f.get("evidence_count", len(f.get("evidence_ids", [])))
+                f_rows.append([
+                    _td(ftype, s),
+                    _td(f"{f.get('severity', 0):.2f}", s),
+                    _td(f.get("rule_id", ""), s, mono=True),
+                    _td(f.get("mitre_tactic", ""), s),
+                    _td(f.get("description", ""), s),
+                    _td(str(ev_count), s),
+                    _td(_fmt_dt(f.get("created_at")).replace(" UTC",""), s),
+                ])
+            desc_w = pw - (24 + 12 + 32 + 22 + 14 + 26) * mm
+            story.append(_tbl(f_rows, [24*mm, 12*mm, 32*mm, 22*mm, desc_w, 14*mm, 26*mm]))
+        else:
+            story.append(Paragraph("No findings recorded for this investigation matching filter criteria.", s["body"]))
 
     # ── 3. EVIDENCE & CORRELATION ANALYSIS ─────────────────────────────────────
-    story.extend(_section("Evidence Sources", s))
+    if not data.sections or "evidence_inventory" in data.sections or "evidence_integrity" in data.sections:
+        story.extend(_section("Evidence Sources & Integrity Verification", s))
 
-    if data.sources:
-        src_rows = [[
-            _th("Filename", s), _th("Format", s), _th("SHA-256 (truncated)", s),
-            _th("Size", s), _th("Status", s), _th("Ingested At", s),
-        ]]
-        for src in data.sources:
-            sha = str(src.get("sha256_hash", ""))
-            sha_display = sha[:32] + "…" if len(sha) > 32 else sha
-            ing_status  = _label(src.get("ingestion_status", ""), STATUS_LABELS)
-            src_rows.append([
-                _td(src.get("filename", ""), s),
-                _td(src.get("file_format", ""), s),
-                _td(sha_display, s, mono=True),
-                _td(_fmt_bytes(src.get("file_size_bytes", 0)), s),
-                _td(ing_status, s),
-                _td(_fmt_dt(src.get("ingested_at")).replace(" UTC",""), s),
-            ])
-        file_w = pw - (16 + 50 + 18 + 20 + 26) * mm
-        story.append(_tbl(
-            src_rows,
-            [file_w, 16*mm, 50*mm, 18*mm, 20*mm, 26*mm],
-        ))
-    else:
-        story.append(Paragraph("No evidence sources ingested for this investigation.", s["body"]))
-
-    story.extend(_section("Correlations", s))
-
-    if data.relationships:
-        display_rels = data.relationships[:100]
-        id_w = (pw - 55*mm) / 2
-        r_rows = [[
-            _th("Relationship Type", s), _th("Weight", s),
-            _th("Source Evidence ID", s), _th("Target Evidence ID", s),
-        ]]
-        for r in display_rels:
-            rel_label = r.get("relationship_type", "").replace("_", " ").title()
-            r_rows.append([
-                _td(rel_label, s),
-                _td(f"{r.get('weight', 0):.3f}", s),
-                _td(str(r.get("source_evidence_id", "")), s, mono=True),
-                _td(str(r.get("target_evidence_id", "")), s, mono=True),
-            ])
-        story.append(_tbl(r_rows, [40*mm, 15*mm, id_w, id_w]))
-
-        total_rels = sm.get("total_relationships", len(data.relationships))
-        if total_rels > 100:
-            story.append(Spacer(1, 4 * mm))
+        if data.sources:
+            src_rows = [[
+                _th("Filename", s), _th("Format", s), _th("SHA-256 (truncated)", s),
+                _th("Size", s), _th("Status", s), _th("Ingested At", s),
+            ]]
+            for src in data.sources:
+                sha = str(src.get("sha256_hash", ""))
+                sha_display = sha[:32] + "…" if len(sha) > 32 else sha
+                ing_status  = _label(src.get("ingestion_status", ""), STATUS_LABELS)
+                src_rows.append([
+                    _td(src.get("filename", ""), s),
+                    _td(src.get("file_format", ""), s),
+                    _td(sha_display, s, mono=True),
+                    _td(_fmt_bytes(src.get("file_size_bytes", 0)), s),
+                    _td(ing_status, s),
+                    _td(_fmt_dt(src.get("ingested_at")).replace(" UTC",""), s),
+                ])
+            file_w = pw - (16 + 50 + 18 + 20 + 26) * mm
+            story.append(_tbl(
+                src_rows,
+                [file_w, 16*mm, 50*mm, 18*mm, 20*mm, 26*mm],
+            ))
+            story.append(Spacer(1, 3 * mm))
             story.append(Paragraph(
-                f"Showing first 100 of {total_rels} correlations.", s["body"]))
-    else:
-        story.append(Paragraph("No correlations discovered for this investigation.", s["body"]))
+                "Evidence Integrity Notice: Cryptographic SHA-256 hashes recorded above verify raw data content integrity "
+                "against stored digests at ingestion time. This check confirms file bitstream consistency and does not "
+                "independently establish third-party authenticity or legal chain of custody.",
+                s["disclaimer"],
+            ))
+        else:
+            story.append(Paragraph("No evidence sources ingested for this investigation.", s["body"]))
 
-    story.extend(_section("ML Anomalies", s))
+    if not data.sections or "correlations" in data.sections:
+        story.extend(_section("Correlations", s))
 
-    ml_findings = [f for f in data.findings if f.get("finding_type") == "ML_ANOMALY"]
-    if ml_findings:
-        ml_rows = [[_th("Rule ID", s), _th("Score", s), _th("Description", s), _th("Detected At", s)]]
-        for f in ml_findings:
-            ml_rows.append([
-                _td(f.get("rule_id", ""), s, mono=True),
-                _td(f"{f.get('severity', 0):.4f}", s),
-                _td(f.get("description", ""), s),
-                _td(_fmt_dt(f.get("created_at")).replace(" UTC",""), s),
-            ])
-        story.append(_tbl(ml_rows, [35*mm, 15*mm, pw-80*mm, 30*mm]))
-    else:
-        story.append(Paragraph("No ML anomalies detected for this investigation.", s["body"]))
+        if data.relationships:
+            display_rels = data.relationships[:100]
+            id_w = (pw - 55*mm) / 2
+            r_rows = [[
+                _th("Relationship Type", s), _th("Weight", s),
+                _th("Source Evidence ID", s), _th("Target Evidence ID", s),
+            ]]
+            for r in display_rels:
+                rel_label = r.get("relationship_type", "").replace("_", " ").title()
+                r_rows.append([
+                    _td(rel_label, s),
+                    _td(f"{r.get('weight', 0):.3f}", s),
+                    _td(str(r.get("source_evidence_id", "")), s, mono=True),
+                    _td(str(r.get("target_evidence_id", "")), s, mono=True),
+                ])
+            story.append(_tbl(r_rows, [40*mm, 15*mm, id_w, id_w]))
+
+            total_rels = sm.get("total_relationships", len(data.relationships))
+            if total_rels > 100:
+                story.append(Spacer(1, 4 * mm))
+                story.append(Paragraph(
+                    f"Showing first 100 of {total_rels} correlations.", s["body"]))
+        else:
+            story.append(Paragraph("No correlations discovered for this investigation.", s["body"]))
+
+    if not data.sections or "ml_anomalies" in data.sections:
+        story.extend(_section("ML Anomalies", s))
+
+        ml_findings = [f for f in data.findings if f.get("finding_type") == "ML_ANOMALY"]
+        if ml_findings:
+            ml_rows = [[_th("Rule ID", s), _th("Score", s), _th("Description", s), _th("Detected At", s)]]
+            for f in ml_findings:
+                ml_rows.append([
+                    _td(f.get("rule_id", ""), s, mono=True),
+                    _td(f"{f.get('severity', 0):.4f}", s),
+                    _td(f.get("description", ""), s),
+                    _td(_fmt_dt(f.get("created_at")).replace(" UTC",""), s),
+                ])
+            story.append(_tbl(ml_rows, [35*mm, 15*mm, pw-80*mm, 30*mm]))
+        else:
+            story.append(Paragraph("No ML anomalies detected for this investigation.", s["body"]))
 
     # ── 4. ACTIVITY & TECHNICAL DETAILS ────────────────────────────────────────
-    story.extend(_section("Investigation Activities", s))
+    if not data.sections or "activities" in data.sections:
+        story.extend(_section("Investigation Activities", s))
 
-    if data.activities:
-        a_rows = [[
-            _th("Activity Title", s), _th("Type", s), _th("Status", s),
-            _th("Start Time", s), _th("Evid.", s), _th("Find.", s),
-        ]]
-        for a in data.activities:
-            act_type = _label(a.get("activity_type", ""), ACTIVITY_TYPE_LABELS)
-            act_status = _label(a.get("status", ""), STATUS_LABELS)
-            a_rows.append([
-                _td(a.get("title", ""), s),
-                _td(act_type, s),
-                _td(act_status, s),
-                _td(_fmt_dt(a.get("start_time")).replace(" UTC",""), s),
-                _td(str(a.get("evidence_count", 0)), s),
-                _td(str(a.get("finding_count", 0)), s),
-            ])
-        title_w = pw - (30 + 18 + 28 + 12 + 12) * mm
-        story.append(_tbl(a_rows, [title_w, 30*mm, 18*mm, 28*mm, 12*mm, 12*mm]))
-    else:
-        story.append(Paragraph("No activities formed for this investigation.", s["body"]))
+        if data.activities:
+            a_rows = [[
+                _th("Activity Title", s), _th("Type", s), _th("Status", s),
+                _th("Start Time", s), _th("Evid.", s), _th("Find.", s),
+            ]]
+            for a in data.activities:
+                act_type = _label(a.get("activity_type", ""), ACTIVITY_TYPE_LABELS)
+                act_status = _label(a.get("status", ""), STATUS_LABELS)
+                a_rows.append([
+                    _td(a.get("title", ""), s),
+                    _td(act_type, s),
+                    _td(act_status, s),
+                    _td(_fmt_dt(a.get("start_time")).replace(" UTC",""), s),
+                    _td(str(a.get("evidence_count", 0)), s),
+                    _td(str(a.get("finding_count", 0)), s),
+                ])
+            title_w = pw - (30 + 18 + 28 + 12 + 12) * mm
+            story.append(_tbl(a_rows, [title_w, 30*mm, 18*mm, 28*mm, 12*mm, 12*mm]))
+        else:
+            story.append(Paragraph("No activities formed for this investigation.", s["body"]))
 
     # ── 5. TRIAGE DISCLAIMER ───────────────────────────────────────────────────
     story.append(Spacer(1, 10 * mm))

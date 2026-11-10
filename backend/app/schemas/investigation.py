@@ -12,6 +12,7 @@ class InvestigationBase(BaseModel):
     description: Optional[str] = Field(None, description="Detailed case notes or context")
     case_number: str = Field(..., min_length=1, max_length=64, description="Unique case reference identifier")
     status: Literal["OPEN", "CLOSED", "ARCHIVED"] = Field("OPEN", description="Investigation status")
+    investigator_notes: Optional[str] = Field(None, max_length=20000, description="Investigator commentary and conclusion notes")
 
     @field_validator("title")
     @classmethod
@@ -38,6 +39,36 @@ class InvestigationUpdate(BaseModel):
     title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     status: Optional[Literal["OPEN", "CLOSED", "ARCHIVED"]] = None
+    investigator_notes: Optional[str] = Field(None, max_length=20000)
+
+
+class InvestigationNotesUpdate(BaseModel):
+    notes: Optional[str] = Field(None, max_length=20000, description="Investigator notes or commentary")
+
+
+class InvestigationNotesRead(BaseModel):
+    investigation_id: uuid.UUID
+    notes: Optional[str] = None
+    updated_at: datetime
+
+
+class ChecklistItemRead(BaseModel):
+    key: str
+    label: str
+    category: Literal["REQUIRED_OPERATION", "OPTIONAL_INVESTIGATION", "INFORMATIONAL"]
+    status: Literal["COMPLETE", "INCOMPLETE", "ATTENTION"]
+    description: str
+    action_tab: Optional[str] = None
+    action_label: Optional[str] = None
+
+
+class InvestigationChecklistRead(BaseModel):
+    investigation_id: uuid.UUID
+    case_number: str
+    items: List[ChecklistItemRead]
+    completed_required_count: int
+    total_required_count: int
+    summary_text: str
 
 
 class InvestigationRead(InvestigationBase):
