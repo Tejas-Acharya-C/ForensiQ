@@ -115,7 +115,11 @@ class IngestionService:
             if existing_source and not allow_duplicates:
                 raise DuplicateSourceError(
                     f"An identical evidence file (SHA-256: {sha256_hash}) already exists in this investigation.",
-                    details={"existing_source_id": str(existing_source.id), "filename": existing_source.filename},
+                    details={
+                        "existing_source_id": str(existing_source.id),
+                        "filename": existing_source.filename,
+                        "sha256_hash": sha256_hash,
+                    },
                 )
 
             # 4. Format Detection

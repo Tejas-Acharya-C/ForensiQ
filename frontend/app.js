@@ -14,6 +14,8 @@ const state = {
   activeInvestigationId: localStorage.getItem('forensiq_active_inv_id') || null,
   summary: null,
   isPipelineRunning: false,
+  pipelineExecutionCounter: 0,
+  pipelineRunningByCase: {},
   activeTab: 'tab-overview',
   activeSubtab: 'subpane-activities',
   sourcesCache: new Map(),
@@ -49,7 +51,17 @@ const state = {
     priorityFilter: '',
     methodFilter: '',
     activityFilter: '',
+    reviewStatusFilter: '',
+    sortField: 'priority',
+    sortDirection: 'desc',
   },
+  reportConfig: {
+    priorityFilter: 'ALL',
+    sections: ['executive_summary', 'metadata', 'evidence_inventory', 'findings', 'prioritization', 'activities', 'investigator_notes'],
+    checklist: null,
+    preflight: null,
+  },
+  isPreviewLoading: false,
 };
 
 // URL-Driven Route Configuration (Phase 3)
@@ -72,24 +84,50 @@ let isUpdatingRouteInternally = false;
 
 function parseCurrentRoute() {
   const hash = window.location.hash || '';
-  const match = hash.match(/^#\/case\/([^\/]*)(?:\/([^\/]+))?$/);
-  if (!match) {
-    return { caseId: null, tab: 'overview' };
-  }
-  const rawCaseId = match[1] ? decodeURIComponent(match[1]).trim() : null;
-  const rawTab = match[2] ? decodeURIComponent(match[2]).trim().toLowerCase() : 'overview';
+  const [pathPart, queryPart] = hash.split('?');
+  const match = (pathPart || '').match(/^#\/case\/([^\/]*)(?:\/([^\/]+))?$/);
+
+  const rawCaseId = match && match[1] ? decodeURIComponent(match[1]).trim() : null;
+  const rawTab = match && match[2] ? decodeURIComponent(match[2]).trim().toLowerCase() : 'overview';
   const tab = VALID_TABS.includes(rawTab) ? rawTab : 'overview';
+
+  const params = new URLSearchParams(queryPart || '');
+  const rawFindingId = params.get('finding') ? params.get('finding').trim() : null;
+  const rawEvidenceId = params.get('evidence') ? params.get('evidence').trim() : null;
+
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  const findingId = rawFindingId && uuidRegex.test(rawFindingId) ? rawFindingId : null;
+  const evidenceId = rawEvidenceId && uuidRegex.test(rawEvidenceId) ? rawEvidenceId : null;
+  const caseId = rawCaseId && uuidRegex.test(rawCaseId) ? rawCaseId : null;
+
   return {
-    caseId: rawCaseId || null,
-    tab: tab
+    caseId,
+    tab,
+    findingId,
+    evidenceId,
   };
 }
 
-function updateRouteHash(caseId, tabName) {
+function updateRouteHash(caseId, tabName, params = {}) {
   const cId = caseId !== undefined ? caseId : state.activeInvestigationId;
   const currentPane = state.activeTab;
   const tName = tabName || PANE_TO_TAB[currentPane] || 'overview';
-  const targetHash = `#/case/${cId ? encodeURIComponent(cId) : ''}/${tName}`;
+  let targetHash = `#/case/${cId ? encodeURIComponent(cId) : ''}/${tName}`;
+
+  const queryParams = new URLSearchParams();
+  if (tName === 'analysis') {
+    const findingId = params.finding || state.findingsState.selectedFindingId;
+    if (findingId) queryParams.set('finding', findingId);
+  } else if (tName === 'evidence') {
+    const evidenceId = params.evidence || state.selectedEvidenceId;
+    if (evidenceId) queryParams.set('evidence', evidenceId);
+  }
+
+  const qs = queryParams.toString();
+  if (qs) {
+    targetHash += `?${qs}`;
+  }
+
   if (window.location.hash !== targetHash) {
     isUpdatingRouteInternally = true;
     window.location.hash = targetHash;
@@ -115,12 +153,16 @@ function switchTabInternal(targetPaneId) {
   state.activeTab = targetPaneId;
 }
 
-function navigateToTab(tabShortName) {
+function navigateToTab(tabShortName, params = {}) {
   const targetPaneId = TAB_MAP[tabShortName] || 'tab-overview';
-  if (state.activeTab === targetPaneId) return;
-  switchTabInternal(targetPaneId);
-  updateRouteHash(state.activeInvestigationId, tabShortName);
-  refreshActiveDestinationView();
+  const isSameTab = state.activeTab === targetPaneId;
+  if (!isSameTab) {
+    switchTabInternal(targetPaneId);
+  }
+  updateRouteHash(state.activeInvestigationId, tabShortName, params);
+  if (!isSameTab) {
+    refreshActiveDestinationView();
+  }
 }
 
 // Pipeline Stages Specification (7 Human-Readable Stages)
@@ -134,6 +176,18 @@ const PIPELINE_STAGES = [
   { id: 7, key: 'prioritize-contextual', name: '07 Rank Activities', chipId: 'chip-stage-7', scope: 'investigation' },
 ];
 
+// Structured API Error class preserving HTTP status and backend details
+class ApiError extends Error {
+  constructor(message, status = 500, code = null, details = null, rawData = null) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.details = details || {};
+    this.rawData = rawData;
+  }
+}
+
 // API Client Helper
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
@@ -145,9 +199,22 @@ async function apiRequest(endpoint, options = {}) {
 
   try {
     const res = await fetch(url, { ...options, headers });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+
     if (!res.ok) {
-      throw new Error(data.message || data.detail || `Request failed with status ${res.status}`);
+      const message =
+        (data && data.error && data.error.message) ||
+        (data && data.message) ||
+        (data && data.detail) ||
+        `Request failed with status ${res.status}`;
+      const code = (data && data.error && data.error.code) || null;
+      const details = (data && data.error && data.error.details) || (data && data.details) || {};
+      throw new ApiError(message, res.status, code, details, data);
     }
     return data;
   } catch (err) {
@@ -156,19 +223,71 @@ async function apiRequest(endpoint, options = {}) {
   }
 }
 
-// Global Banner Notifications
-function showAlert(message, type = 'warning', timeoutMs = 6000) {
+let activeAlertTimeoutId = null;
+
+// Global Banner Notifications with Dismiss & Optional Action Support
+function showAlert(message, type = 'warning', timeoutMs = 6000, action = null) {
   const alertEl = document.getElementById('dashboard-alert');
   if (!alertEl) return;
-  alertEl.className = `alert alert-${type}`;
-  alertEl.textContent = message;
-  alertEl.style.display = 'block';
 
-  if (timeoutMs > 0) {
-    setTimeout(() => {
-      alertEl.style.display = 'none';
-    }, timeoutMs);
+  if (activeAlertTimeoutId) {
+    clearTimeout(activeAlertTimeoutId);
+    activeAlertTimeoutId = null;
   }
+
+  alertEl.className = `alert alert-${type}`;
+
+  const contentEl = document.getElementById('dashboard-alert-content');
+  const actionContainer = document.getElementById('dashboard-alert-action');
+  const closeBtn = document.getElementById('dashboard-alert-close');
+
+  if (contentEl) {
+    contentEl.textContent = message;
+  } else {
+    alertEl.textContent = message;
+  }
+
+  if (actionContainer) {
+    actionContainer.innerHTML = '';
+    if (action && action.label && typeof action.onClick === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary btn-xs alert-action-btn';
+      btn.textContent = action.label;
+      btn.onclick = () => {
+        hideAlert();
+        action.onClick();
+      };
+      actionContainer.appendChild(btn);
+      actionContainer.style.display = 'flex';
+    } else {
+      actionContainer.style.display = 'none';
+    }
+  }
+
+  if (closeBtn) {
+    closeBtn.onclick = hideAlert;
+  }
+
+  alertEl.style.display = 'flex';
+
+  // Do not auto-dismiss critical danger alerts unless explicit timeout > 0 is provided
+  const effectiveTimeout = (type === 'danger' && timeoutMs === 6000) ? 0 : timeoutMs;
+  if (effectiveTimeout > 0) {
+    activeAlertTimeoutId = setTimeout(() => {
+      hideAlert();
+    }, effectiveTimeout);
+  }
+}
+
+function hideAlert() {
+  const alertEl = document.getElementById('dashboard-alert');
+  if (!alertEl) return;
+  if (activeAlertTimeoutId) {
+    clearTimeout(activeAlertTimeoutId);
+    activeAlertTimeoutId = null;
+  }
+  alertEl.style.display = 'none';
 }
 
 // Initialization Flow
@@ -220,6 +339,12 @@ async function initApp() {
     console.warn('Backend is offline');
   }
 
+  // Setup Drag and Drop File Intake
+  setupEvidenceDragAndDrop();
+
+  // Setup Finding Keyboard Navigation (J/K, Up/Down)
+  setupFindingKeyboardNavigation();
+
   // Setup Hash Routing (Phase 3)
   window.addEventListener('hashchange', handleHashChange);
 
@@ -231,7 +356,8 @@ async function initApp() {
 async function handleHashChange() {
   if (isUpdatingRouteInternally) return;
 
-  const { caseId, tab } = parseCurrentRoute();
+  const route = parseCurrentRoute();
+  const { caseId, tab } = route;
   const targetPaneId = TAB_MAP[tab] || 'tab-overview';
 
   // 1. If route specifies a caseId different from active case
@@ -273,6 +399,12 @@ async function handleHashChange() {
       togglePipelineControls(true);
       await loadActiveInvestigationSummary();
       await refreshActiveDestinationView();
+
+      if (tab === 'analysis' && route.findingId) {
+        selectFinding(route.findingId);
+      } else if (tab === 'evidence' && route.evidenceId) {
+        window.jumpToEvidenceRecord('', route.evidenceId);
+      }
       return;
     } catch (err) {
       showAlert(`Investigation "${caseId}" could not be found or loaded: ${err.message}`, 'danger');
@@ -287,14 +419,25 @@ async function handleHashChange() {
   // 2. If route has no caseId, but cases exist
   if (!caseId && state.investigations.length > 0) {
     const firstCaseId = state.activeInvestigationId || state.investigations[0].id;
-    updateRouteHash(firstCaseId, tab);
+    updateRouteHash(firstCaseId, tab, {
+      finding: route.findingId,
+      evidence: route.evidenceId,
+    });
     return;
   }
 
-  // 3. Same case, just tab switch
-  if (state.activeTab !== targetPaneId) {
+  // 3. Same case: tab switch or selection state restore
+  const tabChanged = state.activeTab !== targetPaneId;
+  if (tabChanged) {
     switchTabInternal(targetPaneId);
     await refreshActiveDestinationView();
+  }
+
+  // Restore finding or evidence selection if route parameters changed
+  if (tab === 'analysis' && route.findingId && route.findingId !== state.findingsState.selectedFindingId) {
+    selectFinding(route.findingId);
+  } else if (tab === 'evidence' && route.evidenceId && route.evidenceId !== state.selectedEvidenceId) {
+    window.jumpToEvidenceRecord('', route.evidenceId);
   }
 }
 
@@ -356,14 +499,32 @@ async function loadInvestigations() {
     // Switch to route's tab or overview
     const initialPane = TAB_MAP[route.tab] || 'tab-overview';
     switchTabInternal(initialPane);
-    updateRouteHash(state.activeInvestigationId, route.tab || 'overview');
+    updateRouteHash(state.activeInvestigationId, route.tab || 'overview', {
+      finding: route.findingId,
+      evidence: route.evidenceId,
+    });
 
     togglePipelineControls(true);
     await loadActiveInvestigationSummary();
     await refreshActiveDestinationView();
+
+    // Restore finding or evidence selection from route if applicable
+    if (route.tab === 'analysis' && route.findingId) {
+      state.findingsState.selectedFindingId = route.findingId;
+      selectFinding(route.findingId);
+    } else if (route.tab === 'evidence' && route.evidenceId) {
+      window.jumpToEvidenceRecord('', route.evidenceId);
+    }
   } catch (err) {
     showAlert(`Failed to load investigations: ${err.message}`, 'danger');
   }
+}
+
+function syncPipelineUIForActiveCase() {
+  const currentInvId = state.activeInvestigationId;
+  const isRunning = Boolean(currentInvId && state.pipelineRunningByCase[currentInvId]);
+  state.isPipelineRunning = isRunning;
+  togglePipelineControls(!isRunning);
 }
 
 function resetCaseScopedState() {
@@ -376,6 +537,37 @@ function resetCaseScopedState() {
   state.evidencePagination.device_id = '';
   state.sourcesCache.clear();
 
+  // Reset finding selection state for the case
+  if (state.findingsState) {
+    state.findingsState.selectedFindingId = null;
+  }
+
+  // Synchronize pipeline running state & control locks to the active investigation
+  syncPipelineUIForActiveCase();
+
+  // Reset report preflight state
+  state.reportConfig.preflight = null;
+  state.isPreviewLoading = false;
+  setPreviewButtonLoading(false);
+  const preflightMissing = document.getElementById('report-preflight-missing-box');
+  if (preflightMissing) preflightMissing.style.display = 'none';
+  const preflightMissingList = document.getElementById('report-preflight-missing-list');
+  if (preflightMissingList) preflightMissingList.innerHTML = '';
+  const previewThreats = document.getElementById('report-preview-threats');
+  if (previewThreats) previewThreats.textContent = '0 findings';
+  const previewSources = document.getElementById('report-preview-sources');
+  if (previewSources) { previewSources.textContent = '0 files'; previewSources.style.color = ''; }
+  const previewRefEv = document.getElementById('report-preview-referenced-ev');
+  if (previewRefEv) previewRefEv.textContent = '0 records';
+  const previewCase = document.getElementById('report-preview-case');
+  if (previewCase) previewCase.textContent = '\u2014';
+  const notesInput = document.getElementById('report-investigator-notes-input');
+  if (notesInput) notesInput.value = '';
+  const notesCounter = document.getElementById('report-notes-counter');
+  if (notesCounter) notesCounter.textContent = '0 / 20,000';
+  const notesStatus = document.getElementById('report-notes-status');
+  if (notesStatus) notesStatus.textContent = '';
+
   // Reset filter inputs if in DOM
   const srcFilter = document.getElementById('filter-evidence-source');
   if (srcFilter) srcFilter.value = '';
@@ -387,6 +579,7 @@ function resetCaseScopedState() {
   if (devFilter) devFilter.value = '';
 
   renderEvidenceInspector(null);
+  hidePipelineCompletionBanner();
 }
 
 // Load Active Investigation Summary (with investigation-switch concurrency guard)
@@ -478,8 +671,16 @@ function openImportEvidenceModal() {
   }
   const form = document.getElementById('form-import-evidence');
   if (form) form.reset();
+
+  const dropFilename = document.getElementById('drop-zone-filename');
+  if (dropFilename) dropFilename.style.display = 'none';
+
   const errAlert = document.getElementById('import-error');
-  if (errAlert) errAlert.style.display = 'none';
+  if (errAlert) {
+    errAlert.style.display = 'none';
+    const actionEl = document.getElementById('import-error-action');
+    if (actionEl) actionEl.style.display = 'none';
+  }
   const succAlert = document.getElementById('import-success');
   if (succAlert) succAlert.style.display = 'none';
 
@@ -511,7 +712,7 @@ function updateWorkflowGuide() {
   const totalEvidence = state.summary ? state.summary.total_evidence : 0;
   const totalFindings = state.summary ? (state.summary.total_findings + state.summary.total_anomalies) : 0;
   const totalPrio = state.summary ? state.summary.total_priority_results : 0;
-  const isAnalyzed = totalEvidence > 0 && (totalPrio > 0 || totalFindings > 0);
+  const isAnalyzed = totalEvidence > 0 && (totalPrio > 0 || totalFindings > 0 || state.hasRunPipeline);
   const isRunning = state.isPipelineRunning;
 
   // Reset all step classes to pending
@@ -529,6 +730,7 @@ function updateWorkflowGuide() {
     if (status5) status5.textContent = 'Pending';
 
     if (hintEl) hintEl.textContent = 'Step 1 of 5: Select Case';
+    actionBtn.style.display = 'inline-flex';
     actionBtn.textContent = '+ New Case';
     actionBtn.disabled = false;
     actionBtn.onclick = openNewCaseModal;
@@ -543,6 +745,7 @@ function updateWorkflowGuide() {
     if (status5) status5.textContent = 'Pending';
 
     if (hintEl) hintEl.textContent = 'Step 2 of 5: Upload Evidence';
+    actionBtn.style.display = 'inline-flex';
     actionBtn.textContent = 'Import Evidence CSV';
     actionBtn.disabled = false;
     actionBtn.onclick = openImportEvidenceModal;
@@ -557,12 +760,11 @@ function updateWorkflowGuide() {
     if (status4) status4.textContent = 'Pending';
     if (status5) status5.textContent = 'Pending';
 
-    if (hintEl) hintEl.textContent = 'Step 3: Analyzing...';
-    actionBtn.textContent = 'Analyzing...';
-    actionBtn.disabled = true;
+    if (hintEl) hintEl.textContent = 'Step 3 of 5: Pipeline Executing...';
+    actionBtn.style.display = 'none';
     actionBtn.onclick = null;
   } else if (!isAnalyzed) {
-    // Step 1 & 2 done, Step 3 ready: Run Analyze Investigation
+    // Step 1 & 2 done, Step 3 ready: Single primary Analyze Investigation button (#btn-run-full-analysis)
     step1.className = 'workflow-step completed';
     if (status1) status1.textContent = '✓ Done';
     step2.className = 'workflow-step completed';
@@ -572,33 +774,48 @@ function updateWorkflowGuide() {
     if (status4) status4.textContent = 'Pending';
     if (status5) status5.textContent = 'Pending';
 
-    if (hintEl) hintEl.textContent = 'Step 3 of 5: Ready to Analyze';
-    actionBtn.textContent = 'Analyze Investigation';
-    actionBtn.disabled = false;
-    actionBtn.onclick = () => {
-      runFullAnalysisPipeline();
-    };
+    if (hintEl) hintEl.textContent = 'Step 3 of 5: Execute Analysis Pipeline';
+    actionBtn.style.display = 'none';
+    actionBtn.onclick = null;
   } else {
-    // Analysis completed! Steps 1, 2, 3 completed. Step 4 & 5 available.
+    // Analysis completed! Steps 1, 2, 3 completed. Guide through Review Findings or Report.
     step1.className = 'workflow-step completed';
     if (status1) status1.textContent = '✓ Done';
     step2.className = 'workflow-step completed';
     if (status2) status2.textContent = '✓ Done';
     step3.className = 'workflow-step completed';
     if (status3) status3.textContent = '✓ Done';
-    step4.className = 'workflow-step completed';
-    if (status4) status4.textContent = `${totalFindings} Finding${totalFindings === 1 ? '' : 's'}`;
-    step5.className = 'workflow-step active';
-    if (status5) status5.textContent = 'Ready';
 
-    if (hintEl) hintEl.textContent = 'Ready: Review & Report';
-    actionBtn.textContent = 'Download PDF Report';
-    actionBtn.disabled = false;
-    actionBtn.onclick = () => {
-      const findingsBtn = document.getElementById('btn-findings-download-report');
-      const findingsSpinner = document.getElementById('btn-findings-download-report-spinner');
-      downloadInvestigationReport(findingsBtn, findingsSpinner);
-    };
+    if (state.activeTab === 'tab-report') {
+      step4.className = 'workflow-step completed';
+      if (status4) status4.textContent = `${totalFindings} Finding${totalFindings === 1 ? '' : 's'}`;
+      step5.className = 'workflow-step active';
+      if (status5) status5.textContent = 'Active';
+
+      if (hintEl) hintEl.textContent = 'Step 5 of 5: Download Report';
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = 'Download PDF Report';
+      actionBtn.disabled = false;
+      actionBtn.onclick = () => {
+        const findingsBtn = document.getElementById('btn-findings-download-report');
+        const findingsSpinner = document.getElementById('btn-findings-download-report-spinner');
+        downloadInvestigationReport(findingsBtn, findingsSpinner);
+      };
+    } else {
+      // Step 4 is active: Review Findings!
+      step4.className = 'workflow-step active';
+      if (status4) status4.textContent = `${totalFindings} Finding${totalFindings === 1 ? '' : 's'}`;
+      step5.className = 'workflow-step pending';
+      if (status5) status5.textContent = 'Pending';
+
+      if (hintEl) hintEl.textContent = totalFindings > 0 ? `Step 4 of 5: Review ${totalFindings} Finding${totalFindings === 1 ? '' : 's'}` : 'Step 4 of 5: Findings Evaluated (0 detected)';
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = totalFindings > 0 ? `Review Findings (${totalFindings}) \u2192` : 'Review Investigation \u2192';
+      actionBtn.disabled = false;
+      actionBtn.onclick = () => {
+        navigateToTab('analysis');
+      };
+    }
   }
 }
 
@@ -621,15 +838,36 @@ function renderDashboard(s) {
   if (elSources) elSources.textContent = s.total_sources;
   const elEvidence = document.getElementById('metric-evidence');
   if (elEvidence) elEvidence.textContent = s.total_evidence;
+
+  const findingsCount = s.total_findings || 0;
+  const anomaliesCount = s.total_anomalies || 0;
+  const totalDetected = findingsCount + anomaliesCount;
+
   const elFindings = document.getElementById('metric-findings');
-  if (elFindings) elFindings.textContent = (s.total_findings || 0) + (s.total_anomalies || 0);
+  if (elFindings) elFindings.textContent = totalDetected;
+  const elFindingsFoot = document.getElementById('metric-findings-foot');
+  if (elFindingsFoot) {
+    elFindingsFoot.textContent = totalDetected > 0
+      ? `${findingsCount} Rule/IOC Match${findingsCount === 1 ? '' : 'es'} · ${anomaliesCount} ML Outlier${anomaliesCount === 1 ? '' : 's'}`
+      : 'Rule, IOC & ML detections';
+  }
+
   const elActivities = document.getElementById('metric-activities');
   if (elActivities) elActivities.textContent = s.total_activities;
 
   const quickStatus = document.getElementById('case-pipeline-quick-status');
   if (quickStatus) {
-    quickStatus.textContent = s.total_findings > 0 ? `${s.total_findings} FINDINGS` : (s.total_sources > 0 ? 'SOURCES READY' : 'EMPTY');
-    quickStatus.className = `badge font-mono ${s.total_findings > 0 ? 'badge-danger' : 'badge-mono'}`;
+    if (totalDetected > 0) {
+      quickStatus.textContent = anomaliesCount > 0
+        ? `${findingsCount} FINDINGS · ${anomaliesCount} ANOMALY`
+        : `${findingsCount} FINDINGS`;
+      quickStatus.className = 'badge font-mono badge-danger';
+      quickStatus.title = `Case Detections: ${findingsCount} deterministic threat rules, ${anomaliesCount} Isolation Forest statistical anomalies`;
+    } else {
+      quickStatus.textContent = s.total_sources > 0 ? 'SOURCES READY' : 'EMPTY';
+      quickStatus.className = 'badge font-mono badge-mono';
+      quickStatus.title = '';
+    }
   }
 
   updateReportPreview(s);
@@ -653,24 +891,86 @@ function renderDashboard(s) {
   updateWorkflowGuide();
 }
 
+function renderReportPreflightData(data) {
+  if (!data) return;
+  const caseEl = document.getElementById('report-preview-case');
+  const srcEl = document.getElementById('report-preview-sources');
+  const threatsEl = document.getElementById('report-preview-threats');
+  const refEvEl = document.getElementById('report-preview-referenced-ev');
+  const integrityNotice = document.getElementById('report-integrity-notice-text');
+  const missingBox = document.getElementById('report-preflight-missing-box');
+  const missingList = document.getElementById('report-preflight-missing-list');
+
+  if (caseEl) caseEl.textContent = data.case_number || '\u2014';
+  if (srcEl) {
+    if (data.evidence_summary.total_sources > 0 && data.evidence_summary.total_evidence_records === 0) {
+      srcEl.textContent = `${data.evidence_summary.total_sources} files (UNNORMALIZED \u2014 0 records)`;
+      srcEl.style.color = '#f59e0b';
+    } else {
+      srcEl.textContent = `${data.evidence_summary.total_sources} files (${data.evidence_summary.total_evidence_records} records)`;
+      srcEl.style.color = '';
+    }
+  }
+  if (threatsEl) {
+    if (data.findings_summary.total_findings === 0) {
+      threatsEl.textContent = '0 findings (no threats cataloged)';
+    } else if (data.findings_summary.included_findings === 0) {
+      threatsEl.textContent = `0 of ${data.findings_summary.total_findings} findings (none match filter)`;
+    } else {
+      threatsEl.textContent = `${data.findings_summary.included_findings} of ${data.findings_summary.total_findings} findings`;
+    }
+  }
+  if (refEvEl) refEvEl.textContent = `${data.evidence_summary.referenced_evidence_count} records`;
+
+  if (integrityNotice) {
+    if (data.integrity_status.has_sha256_hashes) {
+      integrityNotice.textContent = `Cryptographic SHA-256 ingestion digests recorded for ${data.integrity_status.sources_with_hash} of ${data.integrity_status.total_sources} source file(s) (verifies stored digest availability; active re-hash not performed).`;
+    } else {
+      integrityNotice.textContent = 'No evidence files or SHA-256 digests available yet.';
+    }
+  }
+
+  if (missingBox && missingList) {
+    if (data.missing_or_incomplete && data.missing_or_incomplete.length > 0) {
+      missingBox.style.display = 'block';
+      missingList.innerHTML = data.missing_or_incomplete.map(m => `<li>${escapeHtml(m)}</li>`).join('');
+    } else {
+      missingBox.style.display = 'none';
+      missingList.innerHTML = '';
+    }
+  }
+}
+
 function updateReportPreview(s) {
   const caseEl = document.getElementById('report-preview-case');
   const srcEl = document.getElementById('report-preview-sources');
   const threatsEl = document.getElementById('report-preview-threats');
   const actEl = document.getElementById('report-preview-activities');
+  const refEvEl = document.getElementById('report-preview-referenced-ev');
 
   if (!s || !s.investigation) {
     if (caseEl) caseEl.textContent = '\u2014';
-    if (srcEl) srcEl.textContent = '0 files';
+    if (srcEl) { srcEl.textContent = '0 files'; srcEl.style.color = ''; }
     if (threatsEl) threatsEl.textContent = '0 findings';
     if (actEl) actEl.textContent = '0 threads';
+    if (refEvEl) refEvEl.textContent = '0 records';
     return;
   }
 
   if (caseEl) caseEl.textContent = s.investigation.case_number || '\u2014';
-  if (srcEl) srcEl.textContent = `${s.total_sources || 0} files (${s.total_evidence || 0} events)`;
-  if (threatsEl) threatsEl.textContent = `${s.total_findings || 0} findings`;
   if (actEl) actEl.textContent = `${s.total_activities || 0} threads`;
+
+  // If preflight is active for this case, retain preflight authoritative counts
+  if (state.reportConfig?.preflight && state.reportConfig.preflight.investigation_id === s.investigation.id) {
+    renderReportPreflightData(state.reportConfig.preflight);
+    return;
+  }
+
+  if (srcEl) {
+    srcEl.textContent = `${s.total_sources || 0} files (${s.total_evidence || 0} events)`;
+    srcEl.style.color = '';
+  }
+  if (threatsEl) threatsEl.textContent = `${s.total_findings || 0} findings`;
 }
 
 function renderEmptyInvestigation() {
@@ -688,6 +988,8 @@ function renderEmptyInvestigation() {
 
   const reportBtnFindings = document.getElementById('btn-findings-download-report');
   if (reportBtnFindings) reportBtnFindings.disabled = true;
+  const reportBtnPreview = document.getElementById('btn-preview-report');
+  if (reportBtnPreview) reportBtnPreview.disabled = false;
 
   const elSources = document.getElementById('metric-sources');
   if (elSources) elSources.textContent = '\u2014';
@@ -716,14 +1018,12 @@ function renderEmptyInvestigation() {
   const selectStage = document.getElementById('select-pipeline-stage');
   const newCaseBtn = document.getElementById('btn-new-case');
   const importBtnHeader = document.getElementById('btn-action-import');
-  const importBtnTab = document.getElementById('btn-evidence-tab-import');
 
   if (runFullBtn) runFullBtn.disabled = true;
   if (runSingleBtn) runSingleBtn.disabled = true;
   if (selectStage) selectStage.disabled = true;
   if (newCaseBtn) newCaseBtn.disabled = false;
   if (importBtnHeader) importBtnHeader.disabled = false;
-  if (importBtnTab) importBtnTab.disabled = false;
 
   ['critical','high','medium','low','info'].forEach(t => {
     const bar = document.getElementById(`bar-${t}`);
@@ -743,11 +1043,13 @@ function renderEmptyInvestigation() {
   const actTbody = document.getElementById('activities-tbody');
   if (actTbody) actTbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No active case.</td></tr>';
   const corrTbody = document.getElementById('correlations-tbody');
-  if (corrTbody) corrTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active case.</td></tr>';
-  const mlTbody = document.getElementById('ml-anomalies-tbody');
-  if (mlTbody) mlTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active case.</td></tr>';
+  if (corrTbody) corrTbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active case.</td></tr>';
+  const corrBadge = document.getElementById('correlations-count-badge');
+  if (corrBadge) corrBadge.textContent = '0 relationships';
   const prioTbody = document.getElementById('all-prio-tbody');
   if (prioTbody) prioTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
+  const prioBadge = document.getElementById('prioritization-count-badge');
+  if (prioBadge) prioBadge.textContent = '0 ranked targets';
   const findTbody = document.getElementById('findings-tbody');
   if (findTbody) findTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No active case.</td></tr>';
   const elFindTotal = document.getElementById('findings-count-total');
@@ -758,6 +1060,8 @@ function renderEmptyInvestigation() {
   if (elFindMed) elFindMed.textContent = '0';
   const elFindLow = document.getElementById('findings-count-low');
   if (elFindLow) elFindLow.textContent = '0';
+  const elBreakdown = document.getElementById('findings-breakdown-display');
+  if (elBreakdown) elBreakdown.textContent = '0 Rule/IOC Matches · 0 ML Outliers';
   const selectedFindingCard = document.getElementById('selected-finding-summary-card');
   if (selectedFindingCard) selectedFindingCard.style.display = 'none';
   state.findingsState.rawFindings = [];
@@ -821,12 +1125,9 @@ function renderSourcesTable(sources) {
   sources.forEach(s => {
     const tr = document.createElement('tr');
     const rawHash = s.sha256_hash || '';
-    const hashDisplay = rawHash
-      ? (rawHash.length > 20 ? `${rawHash.substring(0, 8)}…${rawHash.substring(rawHash.length - 8)}` : rawHash)
-      : '—';
     const copyBtnHtml = rawHash
-      ? `<button type="button" class="btn btn-ghost btn-xs btn-copy-hash" onclick="copyDigest('${escapeHtml(rawHash)}', this)" title="Copy SHA-256 digest recorded at ingestion" aria-label="Copy SHA-256 digest">
-           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      ? `<button type="button" class="btn btn-ghost btn-xs btn-copy-hash" onclick="copyDigest('${escapeHtml(rawHash)}', this)" title="Copy SHA-256 digest recorded at ingestion" aria-label="Copy SHA-256 digest" style="padding: 2px 6px;">
+           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2h9a2 2 0 0 1 2 2v1"></path></svg>
          </button>`
       : '';
     const cachedIntegrity = state.sourcesIntegrityCache?.get(s.id);
@@ -844,18 +1145,22 @@ function renderSourcesTable(sources) {
         bClass = 'alert-warning';
         icon = '—';
       }
-      integrityBadgeHtml = `<span class="badge ${bClass} text-xs" style="cursor: pointer; margin-left: 4px;" title="Click to view cryptographic verification details" onclick="viewSourceIntegrityModal('${escapeHtml(s.id)}')">${icon} ${escapeHtml(cachedIntegrity.status)}</span>`;
+      integrityBadgeHtml = `<span class="badge ${bClass} text-xs" style="cursor: pointer;" title="Click to view cryptographic verification details" onclick="viewSourceIntegrityModal('${escapeHtml(s.id)}')">${icon} ${escapeHtml(cachedIntegrity.status)}</span>`;
     }
 
     tr.innerHTML = `
       <td><strong>${escapeHtml(s.filename)}</strong></td>
       <td><span class="badge badge-mono">${escapeHtml(s.file_format)}</span></td>
       <td>
-        <div class="hash-cell" style="display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-          <span class="font-mono text-sm hash-val" title="SHA-256 Digest (Recorded at Ingestion): ${escapeHtml(rawHash)}">${escapeHtml(hashDisplay)}</span>
-          ${copyBtnHtml}
-          <button type="button" class="btn btn-ghost btn-xs btn-verify-hash" id="btn-verify-source-${escapeHtml(s.id)}" onclick="verifySourceIntegrity('${escapeHtml(s.id)}')" title="Verify stored file content against recorded SHA-256 digest" style="padding: 1px 5px; font-size: 10px;">Verify</button>
-          <span id="verify-badge-${escapeHtml(s.id)}">${integrityBadgeHtml}</span>
+        <div class="hash-cell" style="display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: inline-flex; align-items: center; gap: 6px; background: var(--color-surface-sunken); padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); max-width: 340px;">
+            <code class="font-mono hash-val text-xs" style="color: var(--color-text); word-break: break-all;" title="SHA-256 Digest (Recorded at Ingestion): ${escapeHtml(rawHash)}">${escapeHtml(rawHash || '—')}</code>
+            ${copyBtnHtml}
+          </div>
+          <div style="display: inline-flex; align-items: center; gap: 6px;">
+            <button type="button" class="btn btn-ghost btn-xs btn-verify-hash" id="btn-verify-source-${escapeHtml(s.id)}" onclick="verifySourceIntegrity('${escapeHtml(s.id)}')" title="Verify stored file content against recorded SHA-256 digest" style="padding: 2px 6px; font-size: 11px;">Verify</button>
+            <span id="verify-badge-${escapeHtml(s.id)}">${integrityBadgeHtml}</span>
+          </div>
         </div>
       </td>
       <td>${formatBytes(s.file_size_bytes)}</td>
@@ -1074,7 +1379,6 @@ function togglePipelineControls(enabled) {
   const caseSelect = document.getElementById('investigation-select');
   const newCaseBtn = document.getElementById('btn-new-case');
   const importBtnHeader = document.getElementById('btn-action-import');
-  const importBtnTab = document.getElementById('btn-evidence-tab-import');
   const exampleImportBtn = document.getElementById('btn-import-example-evidence');
   const wfActionBtn = document.getElementById('workflow-action-btn');
 
@@ -1089,12 +1393,11 @@ function togglePipelineControls(enabled) {
   // New Case creation is ONLY disabled during active pipeline run
   if (newCaseBtn) newCaseBtn.disabled = isRunning;
 
-  // Case selection dropdown: locked only during active pipeline run
-  if (caseSelect) caseSelect.disabled = isRunning;
+  // Case selection dropdown: keep enabled so investigator can switch cases during background execution (DEF-01)
+  if (caseSelect) caseSelect.disabled = false;
 
   // Evidence import controls: locked only during active pipeline run
   if (importBtnHeader) importBtnHeader.disabled = isRunning;
-  if (importBtnTab) importBtnTab.disabled = isRunning;
   if (exampleImportBtn) exampleImportBtn.disabled = isRunning;
 
   // Workflow guide action: disabled only during active pipeline run
@@ -1112,10 +1415,13 @@ async function runFullAnalysisPipeline() {
   }
 
   const runInvestigationId = state.activeInvestigationId;
+  const executionId = ++state.pipelineExecutionCounter;
+  state.pipelineRunningByCase[runInvestigationId] = executionId;
   state.isPipelineRunning = true;
   togglePipelineControls(false);
   updateWorkflowGuide();
   resetAllStageChips();
+  hidePipelineCompletionBanner();
   setPipelineState('Running...', 'warning');
   setPipelineBannerLog('Initiating investigation analysis. Validating investigation sources...', 'running');
 
@@ -1484,12 +1790,29 @@ async function runFullAnalysisPipeline() {
       8000
     );
 
+    state.hasRunPipeline = true;
     // Refresh summary metrics and active destination view
     await loadActiveInvestigationSummary();
     await refreshActiveDestinationView();
+
+    const sum = state.summary || {};
+    const sumFindings = sum.total_findings || 0;
+    const sumAnomalies = sum.total_anomalies || 0;
+    const totalDetections = sumFindings + sumAnomalies;
+    const totalEvents = sum.total_evidence || 0;
+
+    showPipelineCompletionBanner({
+      status: overallState,
+      totalDetections,
+      totalFindings: sumFindings,
+      totalAnomalies: sumAnomalies,
+      totalEvents,
+      hasSkipped,
+    });
   } catch (err) {
     if (state.activeInvestigationId !== runInvestigationId) return;
     console.error('Pipeline Coordinator Failure:', err);
+    hidePipelineCompletionBanner();
     setPipelineState('Error', 'danger');
     setPipelineBannerLog(`Pipeline execution halted due to unexpected error: ${err.message}`, 'error');
     showAlert(`Pipeline stopped: ${err.message}`, 'danger', 10000);
@@ -1507,12 +1830,85 @@ async function runFullAnalysisPipeline() {
       await refreshActiveDestinationView();
     } catch {}
   } finally {
+    if (state.pipelineRunningByCase[runInvestigationId] === executionId) {
+      delete state.pipelineRunningByCase[runInvestigationId];
+    }
     if (state.activeInvestigationId === runInvestigationId) {
-      state.isPipelineRunning = false;
-      togglePipelineControls(true);
+      state.isPipelineRunning = Boolean(state.pipelineRunningByCase[runInvestigationId]);
+      togglePipelineControls(!state.isPipelineRunning);
       updateWorkflowGuide();
     }
   }
+}
+
+function showPipelineCompletionBanner({ status, totalDetections, totalFindings, totalAnomalies, totalEvents, hasSkipped }) {
+  const banner = document.getElementById('pipeline-completion-banner');
+  if (!banner) return;
+
+  const icon = document.getElementById('pipeline-completion-icon');
+  const title = document.getElementById('pipeline-completion-title');
+  const desc = document.getElementById('pipeline-completion-desc');
+  const viewBtn = document.getElementById('btn-pipeline-view-findings');
+  const dismissBtn = document.getElementById('btn-pipeline-dismiss-banner');
+
+  if (dismissBtn) {
+    dismissBtn.onclick = hidePipelineCompletionBanner;
+  }
+
+  if (status === 'Failed') {
+    if (icon) { icon.textContent = '✕'; icon.style.color = 'var(--prio-critical)'; }
+    if (title) title.textContent = 'Pipeline Halted';
+    if (desc) desc.textContent = 'One or more analysis stages could not be completed. Review stage indicators above.';
+    if (viewBtn) {
+      viewBtn.textContent = 'Explore Normalized Evidence \u2192';
+      viewBtn.className = 'btn btn-secondary btn-sm';
+      viewBtn.onclick = () => {
+        navigateToTab('evidence');
+      };
+    }
+  } else if (totalDetections > 0) {
+    if (icon) { icon.textContent = '✓'; icon.style.color = 'var(--accent-success)'; }
+    if (title) {
+      title.textContent = `Analysis Completed: ${totalDetections} Threat${totalDetections === 1 ? '' : 's'} Identified`;
+    }
+    if (desc) {
+      desc.textContent = `${totalFindings} deterministic rule/IOC finding${totalFindings === 1 ? '' : 's'}, ${totalAnomalies} ML outlier${totalAnomalies === 1 ? '' : 's'} prioritized across ${totalEvents} normalized events.`;
+    }
+    if (viewBtn) {
+      viewBtn.textContent = `View Findings (${totalDetections}) \u2192`;
+      viewBtn.className = 'btn btn-primary btn-sm';
+      viewBtn.onclick = () => {
+        navigateToTab('analysis');
+        setTimeout(() => {
+          const findingsSection = document.getElementById('threat-discovery-panel');
+          if (findingsSection) findingsSection.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      };
+    }
+  } else {
+    // Zero findings case
+    if (icon) { icon.textContent = '●'; icon.style.color = 'var(--accent-technical)'; }
+    if (title) {
+      title.textContent = 'Analysis Completed: 0 Findings Detected';
+    }
+    if (desc) {
+      desc.textContent = `Deterministic rules and Isolation Forest models evaluated ${totalEvents} normalized records with no threats matching active thresholds.`;
+    }
+    if (viewBtn) {
+      viewBtn.textContent = 'Explore Normalized Evidence \u2192';
+      viewBtn.className = 'btn btn-secondary btn-sm';
+      viewBtn.onclick = () => {
+        navigateToTab('evidence');
+      };
+    }
+  }
+
+  banner.style.display = 'block';
+}
+
+function hidePipelineCompletionBanner() {
+  const banner = document.getElementById('pipeline-completion-banner');
+  if (banner) banner.style.display = 'none';
 }
 
 // Single Pipeline Stage Runner with Explicit Prerequisite Communication & Truthful Status
@@ -1527,6 +1923,8 @@ async function runSinglePipelineStage(stageKey) {
   const stage = PIPELINE_STAGES.find(s => s.key === stageKey);
   if (!stage) return;
 
+  const executionId = ++state.pipelineExecutionCounter;
+  state.pipelineRunningByCase[runInvestigationId] = executionId;
   state.isPipelineRunning = true;
   togglePipelineControls(false);
   setStageChipState(stage.chipId, 'running');
@@ -1720,9 +2118,12 @@ async function runSinglePipelineStage(stageKey) {
     setPipelineBannerLog(`${stage.name} failed: ${err.message}`, 'error');
     showAlert(`${stage.name} failed: ${err.message}`, 'danger');
   } finally {
+    if (state.pipelineRunningByCase[runInvestigationId] === executionId) {
+      delete state.pipelineRunningByCase[runInvestigationId];
+    }
     if (state.activeInvestigationId === runInvestigationId) {
-      state.isPipelineRunning = false;
-      togglePipelineControls(true);
+      state.isPipelineRunning = Boolean(state.pipelineRunningByCase[runInvestigationId]);
+      togglePipelineControls(!state.isPipelineRunning);
     }
   }
 }
@@ -1778,17 +2179,23 @@ async function refreshActiveDestinationView() {
     await loadSources();
     await loadEvidenceRecords();
   } else if (state.activeTab === 'tab-analysis') {
-    await Promise.all([loadActivities(), loadFindings()]);
-    const adv = document.getElementById('advanced-analysis-details');
-    if (adv && adv.open) {
-      await Promise.all([loadCorrelations(), loadAllPrioritizations()]);
-    }
+    await Promise.all([
+      loadActivities(),
+      loadFindings(),
+      loadCorrelations(),
+      loadAllPrioritizations(),
+    ]);
   } else if (state.activeTab === 'tab-report' || state.activeTab === 'tab-findings') {
     if (!state.summary && state.activeInvestigationId) {
       await loadActiveInvestigationSummary();
     } else {
       updateReportPreview(state.summary);
     }
+    await Promise.all([
+      loadInvestigationChecklist(),
+      loadReportPreflight(),
+      loadInvestigatorNotes(),
+    ]);
   }
 }
 
@@ -1802,7 +2209,7 @@ function hideExampleEvidenceBanner() {
   if (banner) banner.style.display = 'none';
 }
 
-// Download PDF Investigation Report Helper
+// Download PDF Investigation Report Helper (Phase 3 with configuration parameters)
 async function downloadInvestigationReport(btnEl, spinnerEl) {
   if (!state.activeInvestigationId) return;
   const currentInvId = state.activeInvestigationId;
@@ -1814,7 +2221,14 @@ async function downloadInvestigationReport(btnEl, spinnerEl) {
   if (findingsSpinner) findingsSpinner.style.display = 'inline';
 
   try {
-    const url = `${API_BASE}/investigations/${currentInvId}/report`;
+    const secParam = (state.reportConfig?.sections || []).join(',');
+    const prioParam = state.reportConfig?.priorityFilter || 'ALL';
+    const qParts = [];
+    if (secParam) qParts.push(`sections=${encodeURIComponent(secParam)}`);
+    if (prioParam && prioParam !== 'ALL') qParts.push(`priority_filter=${encodeURIComponent(prioParam)}`);
+    const qStr = qParts.length > 0 ? `?${qParts.join('&')}` : '';
+
+    const url = `${API_BASE}/investigations/${currentInvId}/report${qStr}`;
     const res = await fetch(url);
 
     if (!res.ok) {
@@ -1850,6 +2264,254 @@ async function downloadInvestigationReport(btnEl, spinnerEl) {
   }
 }
 
+// --------------------------------------------------------------------------
+// Phase 3: Investigation Quality Checklist & Preflight Functions
+// --------------------------------------------------------------------------
+
+async function loadInvestigationChecklist() {
+  const currentInvId = state.activeInvestigationId;
+  if (!currentInvId) return;
+  const container = document.getElementById('report-checklist-container');
+  const summaryBadge = document.getElementById('checklist-summary-badge');
+  if (!container) return;
+
+  try {
+    const data = await apiRequest(`/investigations/${encodeURIComponent(currentInvId)}/checklist`);
+    state.reportConfig.checklist = data;
+
+    if (summaryBadge) {
+      summaryBadge.textContent = `${data.completed_required_count} of ${data.total_required_count} required operations complete`;
+      summaryBadge.className = `badge ${data.completed_required_count === data.total_required_count ? 'badge-status-complete' : 'badge-mono'}`;
+    }
+
+    if (!data.items || data.items.length === 0) {
+      container.innerHTML = '<div class="text-muted text-xs">No checklist items available.</div>';
+      return;
+    }
+
+    container.innerHTML = data.items.map(item => {
+      const statusBadgeClass = item.status === 'COMPLETE' ? 'badge-status-complete' : (item.status === 'ATTENTION' ? 'badge-status-attention' : 'badge-status-incomplete');
+      const isPreviewAction = item.key === 'report_preflight' || item.action_label === 'Preview Report';
+      const onclickAttr = isPreviewAction
+        ? 'triggerReportPreview()'
+        : `navigateToTab('${escapeHtml(item.action_tab.replace('tab-', ''))}')`;
+      const actionBtnHtml = (item.action_tab && item.action_label) ? `
+        <button type="button" class="btn btn-ghost btn-xs text-accent" onclick="${onclickAttr}" style="font-size: 11px; padding: 2px 6px;" aria-label="${escapeHtml(item.action_label)} for ${escapeHtml(item.label)}">
+          ${escapeHtml(item.action_label)} &rarr;
+        </button>
+      ` : '';
+
+      return `
+        <div class="checklist-item-card">
+          <div class="checklist-item-top">
+            <div>
+              <div class="checklist-item-title">${escapeHtml(item.label)}</div>
+              <p class="checklist-item-desc">${escapeHtml(item.description)}</p>
+            </div>
+            <span class="badge ${statusBadgeClass}" style="font-size: 10px;">${escapeHtml(item.status)}</span>
+          </div>
+          <div class="checklist-item-footer">
+            <span class="text-xs text-muted" style="font-size: 10px;">${escapeHtml(formatEnum(item.category))}</span>
+            ${actionBtnHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    if (container) {
+      container.innerHTML = `<div class="text-danger text-xs">Failed to load checklist: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+function setPreviewButtonLoading(isLoading) {
+  const btnPreview = document.getElementById('btn-preview-report');
+  const spinner = document.getElementById('btn-preview-report-spinner');
+  const btnRefresh = document.getElementById('btn-refresh-preflight');
+
+  if (btnPreview) {
+    btnPreview.disabled = isLoading;
+  }
+  if (spinner) {
+    spinner.style.display = isLoading ? 'inline' : 'none';
+  }
+  if (btnRefresh) {
+    btnRefresh.disabled = isLoading;
+    btnRefresh.textContent = isLoading ? 'Refreshing…' : 'Refresh';
+  }
+}
+
+async function triggerReportPreview(options = {}) {
+  const { silentIfNoCase = false, scrollIntoView = true } = options;
+
+  if (state.isPreviewLoading) return;
+
+  const currentInvId = state.activeInvestigationId;
+  if (!currentInvId) {
+    if (!silentIfNoCase) {
+      showAlert('No active investigation. Please select or create a case first.', 'warning');
+    }
+    return;
+  }
+
+  // Switch to report tab if not already active
+  if (state.activeTab !== 'tab-report') {
+    switchTabInternal('tab-report');
+    updateRouteHash(currentInvId, 'report');
+  }
+
+  state.isPreviewLoading = true;
+  setPreviewButtonLoading(true);
+
+  const prioParam = state.reportConfig?.priorityFilter || 'ALL';
+  const secParam = (state.reportConfig?.sections || []).join(',');
+
+  try {
+    const qParts = [];
+    if (prioParam && prioParam !== 'ALL') qParts.push(`priority_filter=${encodeURIComponent(prioParam)}`);
+    if (secParam) qParts.push(`sections=${encodeURIComponent(secParam)}`);
+    const qStr = qParts.length > 0 ? `?${qParts.join('&')}` : '';
+
+    const data = await apiRequest(`/investigations/${encodeURIComponent(currentInvId)}/report/preflight${qStr}`);
+
+    // Investigation-switching guard: if case changed while request was in-flight, discard stale result
+    if (state.activeInvestigationId !== currentInvId) return;
+
+    state.reportConfig.preflight = data;
+    renderReportPreflightData(data);
+
+    if (scrollIntoView) {
+      const targetEl = document.getElementById('report-preview-case') || document.querySelector('.report-workspace-grid');
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  } catch (err) {
+    if (state.activeInvestigationId === currentInvId) {
+      console.error('Failed to load report preflight audit:', err);
+      showAlert(`Report preview failed: ${err.message || 'Unable to load preflight audit'}`, 'danger');
+    }
+  } finally {
+    state.isPreviewLoading = false;
+    setPreviewButtonLoading(false);
+  }
+}
+
+async function loadReportPreflight() {
+  await triggerReportPreview({ silentIfNoCase: true, scrollIntoView: false });
+}
+
+window.triggerReportPreview = triggerReportPreview;
+
+async function loadInvestigatorNotes() {
+  const currentInvId = state.activeInvestigationId;
+  if (!currentInvId) return;
+
+  const notesInput = document.getElementById('report-investigator-notes-input');
+  const counterEl = document.getElementById('report-notes-counter');
+  if (!notesInput) return;
+
+  try {
+    const data = await apiRequest(`/investigations/${encodeURIComponent(currentInvId)}/notes`);
+    const val = data.notes || '';
+    notesInput.value = val;
+    if (counterEl) counterEl.textContent = `${val.length.toLocaleString()} / 20,000`;
+  } catch (err) {
+    console.error('Failed to load investigator notes:', err);
+  }
+}
+
+async function saveInvestigatorNotes() {
+  const currentInvId = state.activeInvestigationId;
+  if (!currentInvId) return;
+
+  const notesInput = document.getElementById('report-investigator-notes-input');
+  const saveBtn = document.getElementById('btn-save-investigator-notes');
+  const statusEl = document.getElementById('report-notes-status');
+  if (!notesInput) return;
+
+  const textVal = notesInput.value;
+  if (saveBtn) saveBtn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Saving…';
+
+  try {
+    await apiRequest(`/investigations/${encodeURIComponent(currentInvId)}/notes`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes: textVal }),
+    });
+    if (statusEl) statusEl.textContent = 'Saved';
+    setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 3000);
+    showAlert('Investigator notes saved successfully.', 'success', 3000);
+    await Promise.all([loadInvestigationChecklist(), loadReportPreflight()]);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Failed';
+    showAlert(`Failed to save investigator notes: ${err.message}`, 'danger');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
+}
+
+function updateReportConfigurationFromDOM() {
+  const checkboxes = [
+    { id: 'cfg-sec-exec', key: 'executive_summary' },
+    { id: 'cfg-sec-meta', key: 'metadata' },
+    { id: 'cfg-sec-evidence', key: 'evidence_inventory' },
+    { id: 'cfg-sec-findings', key: 'findings' },
+    { id: 'cfg-sec-prio', key: 'prioritization' },
+    { id: 'cfg-sec-activities', key: 'activities' },
+    { id: 'cfg-sec-notes', key: 'investigator_notes' },
+  ];
+
+  const selected = [];
+  checkboxes.forEach(item => {
+    const el = document.getElementById(item.id);
+    if (!el || el.checked) {
+      selected.push(item.key);
+    }
+  });
+
+  state.reportConfig.sections = selected;
+  loadReportPreflight();
+}
+
+async function updateSelectedFindingNotes() {
+  const currentInvId = state.activeInvestigationId;
+  const currentFindingId = state.findingsState.selectedFindingId;
+  if (!currentInvId || !currentFindingId) return;
+
+  const inputEl = document.getElementById('selected-finding-notes-input');
+  const btnEl = document.getElementById('btn-save-finding-note');
+  if (!inputEl) return;
+  const notesVal = inputEl.value;
+
+  const rawF = (state.findingsState.rawFindings || []).find(f => f.id === currentFindingId);
+  const currentStatus = (rawF?.review_status || 'NEW').toUpperCase();
+
+  // If input is empty string or only whitespace, send null to allow explicit clearing
+  const notesToSend = notesVal.trim() === '' ? null : notesVal;
+
+  if (btnEl) btnEl.disabled = true;
+  try {
+    const res = await apiRequest(`/detection/findings/${encodeURIComponent(currentFindingId)}/review`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        investigation_id: currentInvId,
+        status: currentStatus,
+        notes: notesToSend,
+      }),
+    });
+    if (rawF) rawF.review_notes = res.notes;
+    const filteredF = (state.findingsState.filteredFindings || []).find(f => f.id === currentFindingId);
+    if (filteredF) filteredF.review_notes = res.notes;
+    inputEl.value = res.notes || '';
+    showAlert(res.notes ? 'Finding review note saved.' : 'Finding review note cleared.', 'success', 3000);
+  } catch (err) {
+    showAlert(`Failed to save finding note: ${err.message}`, 'danger');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
 // ==========================================================================
 // Event Listeners Setup
 // ==========================================================================
@@ -1862,14 +2524,8 @@ function setupEventListeners() {
     reportBtnFindings.addEventListener('click', () => downloadInvestigationReport(reportBtnFindings, spinnerFindings));
   }
 
-  // Case Selection Change with Concurrency and Stale Guard
+  // Case Selection Change with Concurrency and Stale Guard (DEF-01: allow switching; syncs active case execution state)
   document.getElementById('investigation-select').addEventListener('change', async (e) => {
-    if (state.isPipelineRunning) {
-      showAlert('Pipeline is currently executing. Case switching is locked until the pipeline halts.', 'warning');
-      e.target.value = state.activeInvestigationId;
-      return;
-    }
-
     // Close any open modals to prevent displaying stale forensic records
     const detailModal = document.getElementById('modal-detail');
     if (detailModal && detailModal.style.display !== 'none') {
@@ -1957,39 +2613,6 @@ function setupEventListeners() {
     });
   }
 
-  const advDetails = document.getElementById('advanced-analysis-details');
-  if (advDetails) {
-    advDetails.addEventListener('toggle', () => {
-      if (advDetails.open && state.activeInvestigationId) {
-        loadCorrelations();
-        loadAllPrioritizations();
-      }
-    });
-  }
-
-  // Analysis Subnavigation Pills Switching
-  document.querySelectorAll('.subnav-pill').forEach(pill => {
-    pill.addEventListener('click', async () => {
-      document.querySelectorAll('.subnav-pill').forEach(p => {
-        p.classList.remove('active');
-        p.setAttribute('aria-selected', 'false');
-      });
-      document.querySelectorAll('.subtab-pane').forEach(sp => sp.classList.remove('active'));
-
-      pill.classList.add('active');
-      pill.setAttribute('aria-selected', 'true');
-      const targetSubpaneId = pill.getAttribute('data-subtab');
-      state.activeSubtab = targetSubpaneId;
-      const targetSubpane = document.getElementById(targetSubpaneId);
-      if (targetSubpane) targetSubpane.classList.add('active');
-
-      if (targetSubpaneId === 'subpane-activities') await loadActivities();
-      else if (targetSubpaneId === 'subpane-correlations') await loadCorrelations();
-      else if (targetSubpaneId === 'subpane-ml') await loadMLAnomalies();
-      else if (targetSubpaneId === 'subpane-prioritization') await loadAllPrioritizations();
-    });
-  });
-
   // Filters
   const filterPrioTier = document.getElementById('filter-prio-tier');
   if (filterPrioTier) filterPrioTier.addEventListener('change', loadAllPrioritizations);
@@ -2045,6 +2668,21 @@ function setupEventListeners() {
     });
   }
 
+  const filterFindingsReview = document.getElementById('filter-findings-review-status');
+  if (filterFindingsReview) {
+    filterFindingsReview.addEventListener('change', (e) => {
+      state.findingsState.reviewStatusFilter = e.target.value;
+      applyFindingsFilters();
+    });
+  }
+
+  const selectFindingReview = document.getElementById('select-finding-review-status');
+  if (selectFindingReview) {
+    selectFindingReview.addEventListener('change', (e) => {
+      updateSelectedFindingReviewStatus(e.target.value);
+    });
+  }
+
   const btnResetFindings = document.getElementById('btn-reset-findings-filters');
   if (btnResetFindings) {
     btnResetFindings.addEventListener('click', resetFindingsFilters);
@@ -2053,6 +2691,69 @@ function setupEventListeners() {
   const btnClearActiveFilters = document.getElementById('btn-clear-active-filters');
   if (btnClearActiveFilters) {
     btnClearActiveFilters.addEventListener('click', resetFindingsFilters);
+  }
+
+  // Phase 3: Reporting Configuration & Preflight Event Listeners
+  const reportFilterPriority = document.getElementById('report-filter-priority');
+  if (reportFilterPriority) {
+    reportFilterPriority.addEventListener('change', (e) => {
+      state.reportConfig.priorityFilter = e.target.value;
+      loadReportPreflight();
+    });
+  }
+
+  const reportSectionCheckboxIds = [
+    'cfg-sec-exec',
+    'cfg-sec-meta',
+    'cfg-sec-evidence',
+    'cfg-sec-findings',
+    'cfg-sec-prio',
+    'cfg-sec-activities',
+    'cfg-sec-notes',
+  ];
+  reportSectionCheckboxIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', updateReportConfigurationFromDOM);
+    }
+  });
+
+  const btnPreviewReport = document.getElementById('btn-preview-report');
+  if (btnPreviewReport) {
+    btnPreviewReport.addEventListener('click', () => {
+      triggerReportPreview();
+    });
+  }
+
+  const btnRefreshPreflight = document.getElementById('btn-refresh-preflight');
+  if (btnRefreshPreflight) {
+    btnRefreshPreflight.addEventListener('click', () => {
+      triggerReportPreview();
+      loadInvestigationChecklist();
+    });
+  }
+
+  const btnSaveNotes = document.getElementById('btn-save-investigator-notes');
+  if (btnSaveNotes) {
+    btnSaveNotes.addEventListener('click', saveInvestigatorNotes);
+  }
+
+  const notesInput = document.getElementById('report-investigator-notes-input');
+  if (notesInput) {
+    notesInput.addEventListener('input', (e) => {
+      const counterEl = document.getElementById('report-notes-counter');
+      if (counterEl) counterEl.textContent = `${e.target.value.length.toLocaleString()} / 20,000`;
+    });
+    notesInput.addEventListener('blur', () => {
+      if (state.activeInvestigationId) {
+        saveInvestigatorNotes();
+      }
+    });
+  }
+
+  const btnSaveFindingNote = document.getElementById('btn-save-finding-note');
+  if (btnSaveFindingNote) {
+    btnSaveFindingNote.addEventListener('click', updateSelectedFindingNotes);
   }
 
   // Metric Cards click-to-filter
@@ -2065,8 +2766,8 @@ function setupEventListeners() {
   if (cardMetricHigh) {
     cardMetricHigh.addEventListener('click', () => {
       const pSelect = document.getElementById('filter-findings-priority');
-      if (pSelect) pSelect.value = 'HIGH';
-      state.findingsState.priorityFilter = 'HIGH';
+      if (pSelect) pSelect.value = 'CRITICAL,HIGH';
+      state.findingsState.priorityFilter = 'CRITICAL,HIGH';
       applyFindingsFilters();
     });
   }
@@ -2088,6 +2789,51 @@ function setupEventListeners() {
       if (pSelect) pSelect.value = 'LOW';
       state.findingsState.priorityFilter = 'LOW';
       applyFindingsFilters();
+    });
+  }
+
+  // Findings Table Header Interactive Sorting Listeners
+  const thPrio = document.getElementById('th-findings-priority');
+  if (thPrio) {
+    thPrio.addEventListener('click', () => setFindingsSorting('priority'));
+    thPrio.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setFindingsSorting('priority');
+      }
+    });
+  }
+
+  const thTitle = document.getElementById('th-findings-title');
+  if (thTitle) {
+    thTitle.addEventListener('click', () => setFindingsSorting('title'));
+    thTitle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setFindingsSorting('title');
+      }
+    });
+  }
+
+  const thMethod = document.getElementById('th-findings-method');
+  if (thMethod) {
+    thMethod.addEventListener('click', () => setFindingsSorting('method'));
+    thMethod.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setFindingsSorting('method');
+      }
+    });
+  }
+
+  const thDate = document.getElementById('th-findings-date');
+  if (thDate) {
+    thDate.addEventListener('click', () => setFindingsSorting('created_at'));
+    thDate.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setFindingsSorting('created_at');
+      }
     });
   }
 
@@ -2333,45 +3079,68 @@ function setupEventListeners() {
   });
 
   // Example Evidence Banner
-  document.getElementById('btn-import-example-evidence').addEventListener('click', async () => {
-    if (state.isPipelineRunning) {
-      showAlert('Pipeline is executing. Please wait for completion before importing evidence.', 'warning');
-      return;
-    }
-    if (!state.activeInvestigationId) {
-      showAlert('No active investigation. Please create a case first.', 'warning');
-      return;
-    }
-    try {
-      setPipelineState('Importing...', 'warning');
-      showAlert('Fetching and importing example evidence CSV...', 'warning');
+  const btnImportExample = document.getElementById('btn-import-example-evidence');
+  if (btnImportExample) {
+    btnImportExample.addEventListener('click', async () => {
+      if (state.isPipelineRunning) {
+        showAlert('Pipeline is executing. Please wait for completion before importing evidence.', 'warning');
+        return;
+      }
+      if (!state.activeInvestigationId) {
+        showAlert('No active investigation. Please create a case first.', 'warning');
+        return;
+      }
+      try {
+        btnImportExample.disabled = true;
+        setPipelineState('Importing...', 'warning');
+        showAlert('Fetching and importing example evidence CSV...', 'warning');
 
-      const csvUrl = `${API_BASE}/examples/example_evidence.csv`;
-      const csvResp = await fetch(csvUrl);
-      if (!csvResp.ok) throw new Error(`Could not fetch example CSV (${csvResp.status})`);
-      const csvBlob = await csvResp.blob();
-      const csvFile = new File([csvBlob], 'example_evidence.csv', { type: 'text/csv' });
+        const csvUrl = `${API_BASE}/examples/example_evidence.csv`;
+        const csvResp = await fetch(csvUrl);
+        if (!csvResp.ok) throw new Error(`Could not fetch example CSV (${csvResp.status})`);
+        const csvBlob = await csvResp.blob();
+        const csvFile = new File([csvBlob], 'example_evidence.csv', { type: 'text/csv' });
 
-      const formData = new FormData();
-      formData.append('investigation_id', state.activeInvestigationId);
-      formData.append('file', csvFile);
-      formData.append('allow_duplicates', false);
+        const formData = new FormData();
+        formData.append('investigation_id', state.activeInvestigationId);
+        formData.append('file', csvFile);
+        formData.append('allow_duplicates', false);
 
-      const res = await apiRequest('/evidence/import', { method: 'POST', body: formData });
-      showAlert(
-        `Example evidence imported: ${res.total_records} records (SHA-256: ${res.sha256_hash.substring(0, 12)}...). ` +
-        `Ready for pipeline analysis.`,
-        'success',
-        8000
-      );
-      hideExampleEvidenceBanner();
-      await loadActiveInvestigationSummary();
-      setPipelineState('Ready', 'success');
-    } catch (err) {
-      showAlert(`Example evidence import failed: ${err.message}`, 'danger');
-      setPipelineState('Error', 'danger');
-    }
-  });
+        const res = await apiRequest('/evidence/import', { method: 'POST', body: formData });
+        showAlert(
+          `Example evidence imported: ${res.total_records} records (SHA-256: ${res.sha256_hash.substring(0, 12)}...). ` +
+          `Ready for pipeline analysis.`,
+          'success',
+          8000
+        );
+        hideExampleEvidenceBanner();
+        await loadActiveInvestigationSummary();
+        setPipelineState('Ready', 'success');
+      } catch (err) {
+        const isDuplicate = err.status === 409 && (err.code === 'DUPLICATE_SOURCE' || (err.details && err.details.existing_source_id));
+        if (isDuplicate) {
+          setPipelineState('Ready', 'success');
+          hideExampleEvidenceBanner();
+          const existingId = err.details?.existing_source_id;
+          const filename = err.details?.filename || 'example_evidence.csv';
+          showAlert(
+            `Duplicate evidence source: An identical file already exists in this case as "${filename}".`,
+            'warning',
+            12000,
+            existingId ? {
+              label: 'View Existing Evidence',
+              onClick: () => navigateToSourceEvidence(existingId, filename),
+            } : null
+          );
+        } else {
+          showAlert(`Example evidence import failed: ${err.message}`, 'danger');
+          setPipelineState('Error', 'danger');
+        }
+      } finally {
+        btnImportExample.disabled = false;
+      }
+    });
+  }
 
   document.getElementById('btn-dismiss-example-banner').addEventListener('click', () => {
     hideExampleEvidenceBanner();
@@ -2382,12 +3151,9 @@ function setupEventListeners() {
     exampleBannerDl.href = `${API_BASE}/examples/example_evidence.csv`;
   }
 
-  // Import Evidence Modal Triggers
+  // Import Evidence Modal Trigger (Header action)
   const headerImportBtn = document.getElementById('btn-action-import');
   if (headerImportBtn) headerImportBtn.addEventListener('click', openImportEvidenceModal);
-
-  const tabImportBtn = document.getElementById('btn-evidence-tab-import');
-  if (tabImportBtn) tabImportBtn.addEventListener('click', openImportEvidenceModal);
 
   // Import Evidence Form
   document.getElementById('form-import-evidence').addEventListener('submit', async (e) => {
@@ -2399,7 +3165,15 @@ function setupEventListeners() {
     errAlert.style.display = 'none';
     succAlert.style.display = 'none';
 
-    if (!fileInput.files || fileInput.files.length === 0) return;
+    if (!fileInput.files || fileInput.files.length === 0) {
+      errAlert.className = 'alert alert-warning';
+      const msgEl = document.getElementById('import-error-msg') || errAlert;
+      msgEl.textContent = 'Please choose an evidence file or drag and drop one into the staging area.';
+      const actionEl = document.getElementById('import-error-action');
+      if (actionEl) actionEl.style.display = 'none';
+      errAlert.style.display = 'block';
+      return;
+    }
 
     const formData = new FormData();
     formData.append('investigation_id', state.activeInvestigationId);
@@ -2420,12 +3194,205 @@ function setupEventListeners() {
         setPipelineState('Ready', 'success');
       }, 1500);
     } catch (err) {
-      errAlert.textContent = err.message;
-      errAlert.style.display = 'block';
       document.getElementById('btn-submit-import').disabled = false;
-      setPipelineState('Import Error', 'danger');
+      const isDuplicate = err.status === 409 && (err.code === 'DUPLICATE_SOURCE' || (err.details && err.details.existing_source_id));
+
+      if (isDuplicate) {
+        setPipelineState('Ready', 'success');
+        const existingId = err.details?.existing_source_id;
+        const filename = err.details?.filename || (fileInput.files[0] ? fileInput.files[0].name : 'evidence file');
+        const hashDisplay = err.details?.sha256_hash ? ` (SHA-256: ${err.details.sha256_hash.substring(0, 12)}...)` : '';
+
+        errAlert.className = 'alert alert-warning';
+        const msgEl = document.getElementById('import-error-msg') || errAlert;
+        msgEl.textContent = `Duplicate evidence source: An identical file${hashDisplay} already exists in this case as "${filename}".`;
+
+        const actionEl = document.getElementById('import-error-action');
+        if (actionEl && existingId) {
+          actionEl.innerHTML = '';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-secondary btn-xs';
+          btn.textContent = 'View Existing Evidence';
+          btn.onclick = () => {
+            window.closeModal(document.getElementById('modal-import-evidence'));
+            navigateToSourceEvidence(existingId, filename);
+          };
+          actionEl.appendChild(btn);
+          actionEl.style.display = 'block';
+        }
+        errAlert.style.display = 'block';
+      } else {
+        errAlert.className = 'alert alert-danger';
+        const msgEl = document.getElementById('import-error-msg') || errAlert;
+        msgEl.textContent = err.message;
+        const actionEl = document.getElementById('import-error-action');
+        if (actionEl) actionEl.style.display = 'none';
+        errAlert.style.display = 'block';
+        setPipelineState('Import Error', 'danger');
+      }
     }
   });
+}
+
+function navigateToSourceEvidence(sourceId, filename = '') {
+  if (!sourceId) return;
+
+  // 1. Switch to Evidence tab
+  navigateToTab('evidence');
+
+  // 2. Set source filter
+  const srcFilter = document.getElementById('filter-evidence-source');
+  if (srcFilter) {
+    srcFilter.value = sourceId;
+  }
+  state.evidencePagination.source_id = sourceId;
+  state.evidencePagination.offset = 0;
+
+  // Clear conflicting field filters so that all records from this source are visible
+  const evTypeFilter = document.getElementById('filter-evidence-event-type');
+  if (evTypeFilter) evTypeFilter.value = '';
+  state.evidencePagination.event_type = '';
+
+  const userFilter = document.getElementById('filter-evidence-user');
+  if (userFilter) userFilter.value = '';
+  state.evidencePagination.user_id = '';
+
+  const devFilter = document.getElementById('filter-evidence-device');
+  if (devFilter) devFilter.value = '';
+  state.evidencePagination.device_id = '';
+
+  // 3. Reload evidence records and highlight matching source in sources table
+  loadEvidenceRecords().then(() => {
+    const srcRow = document.getElementById(`source-row-${sourceId}`) || document.querySelector(`tr[data-source-id="${sourceId}"]`);
+    if (srcRow) {
+      srcRow.classList.add('row-target-highlight');
+      srcRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      setTimeout(() => srcRow.classList.remove('row-target-highlight'), 3000);
+    }
+  });
+
+  showAlert(
+    filename
+      ? `Filtered evidence records for existing source: "${filename}".`
+      : 'Filtered evidence records for existing source.',
+    'info',
+    6000
+  );
+}
+
+function setupEvidenceDragAndDrop() {
+  const dropZone = document.getElementById('evidence-drop-zone');
+  const fileInput = document.getElementById('import-file');
+  const fileInfoEl = document.getElementById('drop-zone-file-info');
+  const selectedContainer = document.getElementById('drop-zone-filename');
+  const clearBtn = document.getElementById('btn-drop-zone-clear');
+  const errAlert = document.getElementById('import-error');
+
+  if (!dropZone || !fileInput) return;
+
+  const allowedExtensions = ['.csv', '.json', '.jsonl', '.log', '.txt'];
+
+  function updateDisplay(file) {
+    if (!file) {
+      if (selectedContainer) selectedContainer.style.display = 'none';
+      return;
+    }
+    if (fileInfoEl) {
+      const sizeStr = file.size > 1024 * 1024
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+        : `${Math.round(file.size / 1024)} KB`;
+      fileInfoEl.textContent = `${file.name} (${sizeStr})`;
+    }
+    if (selectedContainer) selectedContainer.style.display = 'inline-flex';
+    if (errAlert) errAlert.style.display = 'none';
+  }
+
+  function handleFileSelection(file) {
+    if (!file) return;
+    const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      if (errAlert) {
+        errAlert.className = 'alert alert-danger';
+        const msgEl = document.getElementById('import-error-msg') || errAlert;
+        msgEl.textContent = `Unsupported file format '${ext}'. Accepted formats: CSV, JSON, JSONL, LOG, TXT.`;
+        const actEl = document.getElementById('import-error-action');
+        if (actEl) actEl.style.display = 'none';
+        errAlert.style.display = 'block';
+      }
+      return;
+    }
+
+    try {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+    } catch {
+      // In constrained environments where DataTransfer is unsupported, native dialog remains
+    }
+    updateDisplay(file);
+  }
+
+  // Prevent browser window from opening dropped files outside drop zone
+  window.addEventListener('dragover', (e) => e.preventDefault(), false);
+  window.addEventListener('drop', (e) => e.preventDefault(), false);
+
+  // Drag and drop listeners on dropZone
+  ['dragenter', 'dragover'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add('drop-zone-active');
+    }, false);
+  });
+
+  ['dragleave', 'dragend'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove('drop-zone-active');
+    }, false);
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropZone.classList.remove('drop-zone-active');
+
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length > 0) {
+      handleFileSelection(dt.files[0]);
+    }
+  }, false);
+
+  // Click & keyboard triggers
+  dropZone.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-drop-zone-clear')) return;
+    fileInput.click();
+  });
+
+  dropZone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files.length > 0) {
+      updateDisplay(fileInput.files[0]);
+    } else {
+      updateDisplay(null);
+    }
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.value = '';
+      updateDisplay(null);
+    });
+  }
 }
 
 // ==========================================================================
@@ -2459,8 +3426,10 @@ async function loadAllPrioritizations() {
   const seq = ++state.requestSeq.prioritization;
   const tbody = document.getElementById('all-prio-tbody');
   if (!tbody) return;
-  const tier = document.getElementById('filter-prio-tier').value;
-  const method = document.getElementById('filter-prio-method').value;
+  const tierEl = document.getElementById('filter-prio-tier');
+  const methodEl = document.getElementById('filter-prio-method');
+  const tier = tierEl ? tierEl.value : '';
+  const method = methodEl ? methodEl.value : '';
 
   let query = `/prioritization/results?investigation_id=${currentInvId}&limit=100`;
   if (tier) query += `&priority_tier=${tier}`;
@@ -2470,28 +3439,63 @@ async function loadAllPrioritizations() {
     const res = await apiRequest(query);
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.prioritization) return; // Stale guard
     tbody.innerHTML = '';
-    if (res.items.length === 0) {
+    const items = res.items || [];
+    const countBadge = document.getElementById('prioritization-count-badge');
+    if (countBadge) {
+      countBadge.textContent = `${items.length} ranked target${items.length === 1 ? '' : 's'}`;
+    }
+    if (items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No priority results yet. Run "Run Full Analysis Pipeline" or selective prioritization.</td></tr>';
       return;
     }
-    res.items.forEach(r => {
+    items.forEach(r => {
       const tr = document.createElement('tr');
+      const tierBadge = `<span class="badge ${getFindingTierBadgeClass(r.priority_tier)}">${escapeHtml(r.priority_tier || 'INFORMATIONAL')}</span>`;
+      const scoreDisplay = `<span class="font-mono"><strong>${Number(r.priority_score || 0).toFixed(1)}</strong></span>`;
+
+      let methodLabel = 'Artifact Baseline';
+      if (r.method_type === 'ACTIVITY_CONTEXTUAL') methodLabel = 'Activity Contextual';
+      else if (r.method_type) methodLabel = formatEnum(r.method_type);
+      const methodBadge = `<span class="badge badge-mono text-xs">${escapeHtml(methodLabel)}</span>`;
+
+      let targetCell = `<span class="badge badge-mono text-xs" style="margin-right: 4px;">${escapeHtml(r.target_type || 'ARTIFACT')}</span>`;
+      if (r.target_id) {
+        if (r.target_type === 'ARTIFACT' || r.target_type === 'EVIDENCE') {
+          targetCell += `<button type="button" class="evidence-link-btn font-mono" onclick="window.jumpToEvidenceRecord('', '${escapeHtml(r.target_id)}')" title="Inspect evidence in Explorer: ${escapeHtml(r.target_id)}">${compactId(r.target_id)}</button>`;
+        } else {
+          targetCell += `<span class="font-mono text-xs" title="${escapeHtml(r.target_id)}">${compactId(r.target_id)}</span>`;
+        }
+      } else {
+        targetCell += `<span class="text-muted text-xs">—</span>`;
+      }
+
+      let factorSummary = '';
+      if (r.factors && typeof r.factors === 'object') {
+        const factorEntries = Object.entries(r.factors);
+        if (factorEntries.length > 0) {
+          const preview = factorEntries.slice(0, 2).map(([k, v]) => `${k}: ${typeof v === 'number' ? v.toFixed(1) : v}`).join(', ');
+          factorSummary = `<span class="text-xs text-muted" style="margin-right: 6px;">${escapeHtml(preview)}</span>`;
+        }
+      }
+      const factorsBtn = `<button type="button" class="btn btn-secondary btn-xs" onclick="viewDetailModal('Priority Result Factors', ${escapeHtml(JSON.stringify(r.factors || r))})">View Factors</button>`;
+
+      const explanationCell = `<span class="text-xs text-muted" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 280px;" title="${escapeHtml(r.explanation_text || '')}">${escapeHtml(r.explanation_text || '—')}</span>`;
+      const computedCell = `<span class="text-xs text-muted font-mono">${r.computed_at ? new Date(r.computed_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '—'}</span>`;
+
       tr.innerHTML = `
-        <td><span class="badge ${getTierBadgeClass(r.priority_tier)}">${r.priority_tier}</span></td>
-        <td class="font-mono"><strong>${r.priority_score.toFixed(1)}</strong></td>
-        <td><span class="badge badge-mono text-sm">${r.method_type === 'BASELINE_INDEPENDENT' ? 'Evidence' : 'Activity'}</span></td>
-        <td><span class="badge badge-mono">${r.target_type}</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewDetailModal('Priority Result Factors', ${escapeHtml(JSON.stringify(r))})">View Factors</button>
-        </td>
-        <td style="max-width: 320px; font-size: 11px;">${escapeHtml(r.explanation_text || '')}</td>
-        <td class="text-sm">${new Date(r.computed_at).toLocaleString()}</td>
+        <td>${tierBadge}</td>
+        <td>${scoreDisplay}</td>
+        <td>${methodBadge}</td>
+        <td>${targetCell}</td>
+        <td>${factorSummary}${factorsBtn}</td>
+        <td>${explanationCell}</td>
+        <td>${computedCell}</td>
       `;
       tbody.appendChild(tr);
     });
   } catch (err) {
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.prioritization) return;
-    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading results: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Error loading results: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -2504,21 +3508,130 @@ function getFindingTierBadgeClass(tier) {
   return 'badge-tier-info';
 }
 
+const FINDING_TIER_RANK = {
+  'CRITICAL': 5,
+  'HIGH': 4,
+  'MEDIUM': 3,
+  'LOW': 2,
+  'INFORMATIONAL': 1,
+  'INFO': 1,
+};
+
+function getFindingEffectiveTier(f) {
+  if (f.priority_tier) return String(f.priority_tier).toUpperCase();
+  const sev = typeof f.severity === 'number' ? f.severity : (typeof f.severity_score === 'number' ? f.severity_score : 0);
+  if (sev >= 0.8) return 'CRITICAL';
+  if (sev >= 0.6) return 'HIGH';
+  if (sev >= 0.4) return 'MEDIUM';
+  if (sev >= 0.2) return 'LOW';
+  return 'INFORMATIONAL';
+}
+
+function getFindingEffectiveScore(f) {
+  if (typeof f.priority_score === 'number') return f.priority_score;
+  const sev = typeof f.severity === 'number' ? f.severity : (typeof f.severity_score === 'number' ? f.severity_score : 0);
+  return sev * 100.0;
+}
+
+function sortFindingsList(findings) {
+  const field = state.findingsState.sortField || 'priority';
+  const dir = state.findingsState.sortDirection === 'asc' ? 1 : -1;
+
+  return findings.slice().sort((a, b) => {
+    if (field === 'priority') {
+      const tierA = FINDING_TIER_RANK[getFindingEffectiveTier(a)] || 0;
+      const tierB = FINDING_TIER_RANK[getFindingEffectiveTier(b)] || 0;
+      if (tierA !== tierB) {
+        return dir * (tierA - tierB);
+      }
+      const hasPrioA = typeof a.priority_score === 'number' ? 1 : 0;
+      const hasPrioB = typeof b.priority_score === 'number' ? 1 : 0;
+      if (hasPrioA !== hasPrioB) {
+        return dir * (hasPrioA - hasPrioB);
+      }
+      const scoreA = getFindingEffectiveScore(a);
+      const scoreB = getFindingEffectiveScore(b);
+      if (scoreA !== scoreB) {
+        return dir * (scoreA - scoreB);
+      }
+    } else if (field === 'title') {
+      const titleA = (a.title || a.rule_name || a.finding_type || '').toLowerCase();
+      const titleB = (b.title || b.rule_name || b.finding_type || '').toLowerCase();
+      const cmp = titleA.localeCompare(titleB);
+      if (cmp !== 0) return dir * cmp;
+    } else if (field === 'created_at') {
+      const timeA = new Date(a.created_at || 0).getTime();
+      const timeB = new Date(b.created_at || 0).getTime();
+      if (timeA !== timeB) return dir * (timeA - timeB);
+    } else if (field === 'method') {
+      const methA = (a.detection_method || a.finding_type || '').toLowerCase();
+      const methB = (b.detection_method || b.finding_type || '').toLowerCase();
+      const cmp = methA.localeCompare(methB);
+      if (cmp !== 0) return dir * cmp;
+    }
+
+    // Deterministic tie-breakers: created_at desc, then id desc
+    const timeA = new Date(a.created_at || 0).getTime();
+    const timeB = new Date(b.created_at || 0).getTime();
+    if (timeA !== timeB) return timeB - timeA;
+    return String(b.id || '').localeCompare(String(a.id || ''));
+  });
+}
+
+function setFindingsSorting(field) {
+  if (state.findingsState.sortField === field) {
+    state.findingsState.sortDirection = state.findingsState.sortDirection === 'desc' ? 'asc' : 'desc';
+  } else {
+    state.findingsState.sortField = field;
+    state.findingsState.sortDirection = (field === 'title') ? 'asc' : 'desc';
+  }
+
+  // Update header indicators
+  const headers = [
+    { id: 'th-findings-priority', indId: 'sort-indicator-priority', f: 'priority' },
+    { id: 'th-findings-title', indId: 'sort-indicator-title', f: 'title' },
+    { id: 'th-findings-method', indId: 'sort-indicator-method', f: 'method' },
+    { id: 'th-findings-date', indId: 'sort-indicator-date', f: 'created_at' },
+  ];
+
+  headers.forEach(h => {
+    const el = document.getElementById(h.id);
+    const ind = document.getElementById(h.indId);
+    if (!el || !ind) return;
+    if (h.f === state.findingsState.sortField) {
+      const isDesc = state.findingsState.sortDirection === 'desc';
+      el.setAttribute('aria-sort', isDesc ? 'descending' : 'ascending');
+      ind.textContent = isDesc ? '▼' : '▲';
+    } else {
+      el.setAttribute('aria-sort', 'none');
+      ind.textContent = '';
+    }
+  });
+
+  applyFindingsFilters();
+}
+
 function updateFindingsSummaryMetrics(findings) {
   let highCount = 0;
   let medCount = 0;
   let lowCount = 0;
+  let ruleCount = 0;
+  let mlCount = 0;
 
   findings.forEach(f => {
-    const tier = (f.priority_tier || '').toUpperCase();
-    const sev = typeof f.severity === 'number' ? f.severity : (f.severity_score || 0);
-
-    if (tier === 'CRITICAL' || tier === 'HIGH' || (!tier && sev >= 0.6)) {
+    const tier = getFindingEffectiveTier(f);
+    if (tier === 'CRITICAL' || tier === 'HIGH') {
       highCount++;
-    } else if (tier === 'MEDIUM' || (!tier && sev >= 0.4 && sev < 0.6)) {
+    } else if (tier === 'MEDIUM') {
       medCount++;
     } else {
       lowCount++;
+    }
+
+    if (f.finding_type === 'ML_ANOMALY' || f.detection_method === 'ML') {
+      mlCount++;
+    } else {
+      ruleCount++;
     }
   });
 
@@ -2530,6 +3643,11 @@ function updateFindingsSummaryMetrics(findings) {
   if (elMed) elMed.textContent = medCount;
   const elLow = document.getElementById('findings-count-low');
   if (elLow) elLow.textContent = lowCount;
+
+  const elBreakdown = document.getElementById('findings-breakdown-display');
+  if (elBreakdown) {
+    elBreakdown.textContent = `${ruleCount} Rule/IOC Match${ruleCount === 1 ? '' : 'es'} · ${mlCount} ML Outlier${mlCount === 1 ? '' : 's'}`;
+  }
 }
 
 function applyFindingsFilters() {
@@ -2546,7 +3664,7 @@ function applyFindingsFilters() {
   const cardLow = document.getElementById('metric-card-low');
 
   if (cardTotal) cardTotal.classList.toggle('active-metric-filter', !prio && !search && !method && !activity);
-  if (cardHigh) cardHigh.classList.toggle('active-metric-filter', prio === 'HIGH' || prio === 'CRITICAL');
+  if (cardHigh) cardHigh.classList.toggle('active-metric-filter', prio === 'CRITICAL,HIGH' || prio === 'HIGH' || prio === 'CRITICAL');
   if (cardMed) cardMed.classList.toggle('active-metric-filter', prio === 'MEDIUM');
   if (cardLow) cardLow.classList.toggle('active-metric-filter', prio === 'LOW' || prio === 'INFORMATIONAL');
 
@@ -2578,19 +3696,20 @@ function applyFindingsFilters() {
 
     // 2. Priority Filter
     if (prio) {
-      const tier = (f.priority_tier || '').toUpperCase();
-      const sev = typeof f.severity === 'number' ? f.severity : (f.severity_score || 0);
+      const tier = getFindingEffectiveTier(f);
 
-      if (prio === 'CRITICAL') {
-        if (tier !== 'CRITICAL' && (tier || sev < 0.8)) return false;
+      if (prio === 'CRITICAL,HIGH' || prio === 'HIGH,CRITICAL') {
+        if (tier !== 'CRITICAL' && tier !== 'HIGH') return false;
+      } else if (prio === 'CRITICAL') {
+        if (tier !== 'CRITICAL') return false;
       } else if (prio === 'HIGH') {
-        if (tier !== 'HIGH' && (tier || (sev < 0.6 || sev >= 0.8))) return false;
+        if (tier !== 'HIGH') return false;
       } else if (prio === 'MEDIUM') {
-        if (tier !== 'MEDIUM' && (tier || (sev < 0.4 || sev >= 0.6))) return false;
-      } else if (prio === 'LOW') {
-        if (tier !== 'LOW' && (tier || (sev < 0.2 || sev >= 0.4))) return false;
+        if (tier !== 'MEDIUM') return false;
+      } else if (prio === 'LOW' || prio === 'LOW,INFORMATIONAL') {
+        if (tier !== 'LOW' && tier !== 'INFORMATIONAL') return false;
       } else if (prio === 'INFORMATIONAL') {
-        if (tier !== 'INFORMATIONAL' && (tier || sev >= 0.2)) return false;
+        if (tier !== 'INFORMATIONAL') return false;
       }
     }
 
@@ -2620,11 +3739,18 @@ function applyFindingsFilters() {
       if (activity === 'UNCORRELATED' && hasAct) return false;
     }
 
+    // 5. Review Status Filter
+    if (state.findingsState.reviewStatusFilter) {
+      const fRev = (f.review_status || 'NEW').toUpperCase();
+      if (fRev !== state.findingsState.reviewStatusFilter) return false;
+    }
+
     return true;
   });
 
-  state.findingsState.filteredFindings = filtered;
-  renderFindingsTable(filtered);
+  const sorted = sortFindingsList(filtered);
+  state.findingsState.filteredFindings = sorted;
+  renderFindingsTable(sorted);
 }
 
 function renderFindingsTable(findings) {
@@ -2634,7 +3760,13 @@ function renderFindingsTable(findings) {
 
   const filterStatusEl = document.getElementById('findings-filter-status');
   const matchCountEl = document.getElementById('findings-match-count');
-  const isFiltered = !!(state.findingsState.searchQuery || state.findingsState.priorityFilter || state.findingsState.methodFilter || state.findingsState.activityFilter);
+  const isFiltered = !!(
+    state.findingsState.searchQuery ||
+    state.findingsState.priorityFilter ||
+    state.findingsState.methodFilter ||
+    state.findingsState.activityFilter ||
+    state.findingsState.reviewStatusFilter
+  );
 
   if (filterStatusEl && matchCountEl) {
     if (isFiltered) {
@@ -2669,15 +3801,19 @@ function renderFindingsTable(findings) {
   findings.forEach(f => {
     const isSelected = f.id === selectedId;
     const tr = document.createElement('tr');
-    tr.className = `finding-row ${isSelected ? 'row-selected' : ''}`;
+
+    // Priority display & source attribution
+    const tier = getFindingEffectiveTier(f);
+    const badgeClass = getFindingTierBadgeClass(tier);
+    let tierAccentClass = '';
+    if (tier === 'CRITICAL') tierAccentClass = 'row-critical-tier';
+    else if (tier === 'HIGH') tierAccentClass = 'row-high-tier';
+
+    tr.className = `finding-row ${tierAccentClass} ${isSelected ? 'row-selected' : ''}`.trim();
     tr.id = `finding-row-${f.id}`;
     tr.tabIndex = 0;
     tr.setAttribute('role', 'button');
     tr.setAttribute('aria-selected', isSelected ? 'true' : 'false');
-
-    // Priority display & source attribution
-    const tier = (f.priority_tier || (f.severity >= 0.8 ? 'CRITICAL' : f.severity >= 0.6 ? 'HIGH' : f.severity >= 0.4 ? 'MEDIUM' : 'LOW')).toUpperCase();
-    const badgeClass = getFindingTierBadgeClass(tier);
 
     let prioBadgeHtml = '';
     if (typeof f.priority_score === 'number') {
@@ -2695,9 +3831,13 @@ function renderFindingsTable(findings) {
       `;
     }
 
-    // Title & Rule subtext
+    // Title & Rule subtext & Review Status Badge
     const primaryTitle = f.title || f.rule_name || formatEnum(f.finding_type);
     const ruleSubtext = f.rule_id || '—';
+    const revStatus = (f.review_status || 'NEW').toUpperCase();
+    const revBadgeClass = getReviewStatusBadgeClass(revStatus);
+    const revBadgeText = formatReviewStatusText(revStatus);
+    const revBadgeHtml = `<span class="badge ${revBadgeClass} finding-review-badge" title="Triage Status: ${revBadgeText}">${revBadgeText}</span>`;
 
     // Detection Method
     const methodText = f.detection_method || (f.finding_type === 'ML_ANOMALY' ? 'ML Anomaly' : f.finding_type === 'IOC_MATCH' ? 'Rule (IOC)' : 'Rule (Deterministic)');
@@ -2726,7 +3866,10 @@ function renderFindingsTable(findings) {
       </td>
       <td>
         <div class="finding-title-cell">
-          <span class="finding-primary-title">${escapeHtml(primaryTitle)}</span>
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <span class="finding-primary-title">${escapeHtml(primaryTitle)}</span>
+            ${revBadgeHtml}
+          </div>
           <span class="finding-rule-subtext">${escapeHtml(ruleSubtext)}</span>
         </div>
       </td>
@@ -2770,6 +3913,157 @@ function renderFindingsTable(findings) {
   }
 }
 
+function getReviewStatusBadgeClass(status) {
+  const s = (status || 'NEW').toUpperCase();
+  if (s === 'REVIEWED') return 'badge-review-reviewed';
+  if (s === 'FALSE_POSITIVE') return 'badge-review-fp';
+  if (s === 'ESCALATED') return 'badge-review-escalated';
+  return 'badge-review-new';
+}
+
+function formatReviewStatusText(status) {
+  const s = (status || 'NEW').toUpperCase();
+  if (s === 'FALSE_POSITIVE') return 'False Positive';
+  if (s === 'REVIEWED') return 'Reviewed';
+  if (s === 'ESCALATED') return 'Escalated';
+  return 'New';
+}
+
+function navigateFindings(direction) {
+  const list = state.findingsState.filteredFindings || [];
+  if (list.length === 0) return;
+
+  const currentId = state.findingsState.selectedFindingId;
+  let currentIndex = list.findIndex(f => f.id === currentId);
+
+  let nextIndex;
+  if (currentIndex === -1) {
+    nextIndex = direction > 0 ? 0 : list.length - 1;
+  } else {
+    nextIndex = currentIndex + direction;
+  }
+
+  // Strict boundary check: do not wrap around
+  if (nextIndex < 0 || nextIndex >= list.length) {
+    return;
+  }
+
+  const target = list[nextIndex];
+  selectFinding(target.id);
+
+  const row = document.getElementById(`finding-row-${target.id}`);
+  if (row) {
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function setupFindingKeyboardNavigation() {
+  window.addEventListener('keydown', (e) => {
+    // Only active when Analysis tab is the active tab
+    if (state.activeTab !== 'tab-analysis') return;
+
+    // Do not intercept if user is typing into an input, textarea, select, or contenteditable
+    const activeEl = document.activeElement;
+    if (activeEl) {
+      const tag = activeEl.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || activeEl.isContentEditable) {
+        return;
+      }
+    }
+
+    // Do not intercept if any modal is visible
+    const openModal = document.querySelector('.modal[style*="display: flex"], .modal[style*="display: block"]');
+    if (openModal) return;
+
+    const key = e.key;
+    if (key === 'j' || key === 'J' || key === 'ArrowDown') {
+      e.preventDefault();
+      navigateFindings(1);
+    } else if (key === 'k' || key === 'K' || key === 'ArrowUp') {
+      e.preventDefault();
+      navigateFindings(-1);
+    }
+  });
+}
+
+async function updateSelectedFindingReviewStatus(newStatus) {
+  const currentInvId = state.activeInvestigationId;
+  const currentFindingId = state.findingsState.selectedFindingId;
+  if (!currentInvId || !currentFindingId) return;
+
+  const selectEl = document.getElementById('select-finding-review-status');
+  if (selectEl) selectEl.disabled = true;
+
+  try {
+    const rawF = (state.findingsState.rawFindings || []).find(f => f.id === currentFindingId);
+    const existingNotes = rawF?.review_notes ?? null;
+
+    const res = await apiRequest(`/detection/findings/${encodeURIComponent(currentFindingId)}/review`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        investigation_id: currentInvId,
+        status: newStatus,
+        notes: existingNotes,
+      }),
+    });
+
+    const statusVal = res.status || newStatus;
+
+    // Update in local state
+    if (rawF) {
+      rawF.review_status = statusVal;
+      rawF.reviewed_at = res.reviewed_at;
+      rawF.review_notes = res.notes !== undefined ? res.notes : existingNotes;
+    }
+    const filteredF = (state.findingsState.filteredFindings || []).find(f => f.id === currentFindingId);
+    if (filteredF) {
+      filteredF.review_status = statusVal;
+      filteredF.reviewed_at = res.reviewed_at;
+      filteredF.review_notes = res.notes !== undefined ? res.notes : existingNotes;
+    }
+
+    // Ensure notes input retains existing notes
+    const notesInput = document.getElementById('selected-finding-notes-input');
+    if (notesInput && res.notes !== undefined) {
+      notesInput.value = res.notes || '';
+    }
+
+    // Update summary card badge
+    const statusBadge = document.getElementById('selected-finding-status-badge');
+    if (statusBadge) {
+      statusBadge.className = `badge ${getReviewStatusBadgeClass(statusVal)}`;
+      statusBadge.textContent = formatReviewStatusText(statusVal);
+      statusBadge.title = `Investigator review decision: ${formatReviewStatusText(statusVal)}`;
+    }
+
+    // Update table row badge
+    const row = document.getElementById(`finding-row-${currentFindingId}`);
+    if (row) {
+      const badgeEl = row.querySelector('.finding-review-badge');
+      if (badgeEl) {
+        badgeEl.className = `badge ${getReviewStatusBadgeClass(statusVal)} finding-review-badge`;
+        badgeEl.textContent = formatReviewStatusText(statusVal);
+        badgeEl.title = `Triage Status: ${formatReviewStatusText(statusVal)}`;
+      }
+    }
+
+    // If review filter is active, re-filter
+    if (state.findingsState.reviewStatusFilter) {
+      applyFindingsFilters();
+    }
+
+    showAlert(`Finding marked as "${formatReviewStatusText(statusVal)}".`, 'info', 3000);
+  } catch (err) {
+    showAlert(`Failed to update review status: ${err.message}`, 'danger');
+    const rawF = (state.findingsState.rawFindings || []).find(f => f.id === currentFindingId);
+    if (selectEl && rawF) {
+      selectEl.value = (rawF.review_status || 'NEW').toUpperCase();
+    }
+  } finally {
+    if (selectEl) selectEl.disabled = false;
+  }
+}
+
 function selectFinding(findingId) {
   state.findingsState.selectedFindingId = findingId;
 
@@ -2788,6 +4082,10 @@ function selectFinding(findingId) {
   if (finding) {
     renderSelectedFindingSummary(finding);
   }
+
+  if (state.activeTab === 'tab-analysis' && findingId) {
+    updateRouteHash(state.activeInvestigationId, 'analysis', { finding: findingId });
+  }
 }
 
 function renderSelectedFindingSummary(f) {
@@ -2800,7 +4098,7 @@ function renderSelectedFindingSummary(f) {
 
   const prioBadge = document.getElementById('selected-finding-prio-badge');
   if (prioBadge) {
-    const tier = (f.priority_tier || (f.severity >= 0.8 ? 'CRITICAL' : f.severity >= 0.6 ? 'HIGH' : f.severity >= 0.4 ? 'MEDIUM' : 'LOW')).toUpperCase();
+    const tier = getFindingEffectiveTier(f);
     prioBadge.className = `badge ${getFindingTierBadgeClass(tier)}`;
     if (typeof f.priority_score === 'number') {
       const srcText = f.priority_source === 'ACTIVITY' ? 'ACTIVITY PRIORITY' : 'ARTIFACT PRIORITY';
@@ -2819,8 +4117,27 @@ function renderSelectedFindingSummary(f) {
 
   const sevBadge = document.getElementById('selected-finding-severity-badge');
   if (sevBadge) {
-    sevBadge.textContent = `RAW SEV: ${f.severity.toFixed(2)} / 1.00`;
+    sevBadge.textContent = `Raw severity: ${f.severity.toFixed(2)} / 1.00`;
     sevBadge.title = 'Raw algorithmic or configured rule severity score';
+  }
+
+  const statusBadge = document.getElementById('selected-finding-status-badge');
+  if (statusBadge) {
+    const revStatus = (f.review_status || 'NEW').toUpperCase();
+    statusBadge.className = `badge ${getReviewStatusBadgeClass(revStatus)}`;
+    statusBadge.textContent = formatReviewStatusText(revStatus);
+    statusBadge.title = `Investigator review decision: ${formatReviewStatusText(revStatus)}`;
+  }
+
+  const selectReviewEl = document.getElementById('select-finding-review-status');
+  if (selectReviewEl) {
+    selectReviewEl.value = (f.review_status || 'NEW').toUpperCase();
+    selectReviewEl.disabled = false;
+  }
+
+  const notesInput = document.getElementById('selected-finding-notes-input');
+  if (notesInput) {
+    notesInput.value = f.review_notes || '';
   }
 
   const idDisplay = document.getElementById('selected-finding-id-display');
@@ -3077,7 +4394,7 @@ function renderWhyDetectedSection(det) {
         </div>
         <div class="summary-meta-item" style="flex: 1; min-width: 140px;">
           <span class="summary-meta-label">Model Classification</span>
-          <span class="summary-meta-value"><span class="badge badge-mono">BEHAVIORAL OUTLIER</span></span>
+          <span class="summary-meta-value"><span class="badge badge-mono">Behavioral outlier</span></span>
         </div>
       </div>
       <div class="forensic-notice-box notice-ml" style="margin-top: 6px;">
@@ -3096,7 +4413,7 @@ function renderSupportingEvidenceSection(evidenceList) {
   if (!content) return;
 
   if (countBadge) {
-    countBadge.textContent = `${evidenceList.length} RECORD${evidenceList.length === 1 ? '' : 'S'}`;
+    countBadge.textContent = `${evidenceList.length} record${evidenceList.length === 1 ? '' : 's'}`;
   }
 
   if (!evidenceList || evidenceList.length === 0) {
@@ -3150,7 +4467,7 @@ function renderCorrelatedActivitiesSection(activityList) {
   if (!content) return;
 
   if (countBadge) {
-    countBadge.textContent = `${activityList.length} ACTIVIT${activityList.length === 1 ? 'Y' : 'IES'}`;
+    countBadge.textContent = `${activityList.length} activit${activityList.length === 1 ? 'y' : 'ies'}`;
   }
 
   if (!activityList || activityList.length === 0) {
@@ -3207,10 +4524,10 @@ function renderPriorityExplanationSection(prio, secondaries) {
 
   if (srcBadge && prio) {
     srcBadge.textContent = prio.priority_source === 'ACTIVITY'
-      ? 'CONTEXTUAL ACTIVITY TRIAGE'
+      ? 'Contextual activity priority'
       : prio.priority_source === 'ARTIFACT'
-      ? 'BASELINE ARTIFACT TRIAGE'
-      : 'SEVERITY FALLBACK';
+      ? 'Baseline artifact priority'
+      : 'Severity fallback';
   }
 
   if (!prio) {
@@ -3328,6 +4645,7 @@ function resetFindingsFilters() {
   state.findingsState.priorityFilter = '';
   state.findingsState.methodFilter = '';
   state.findingsState.activityFilter = '';
+  state.findingsState.reviewStatusFilter = '';
 
   const searchInput = document.getElementById('findings-search-input');
   if (searchInput) searchInput.value = '';
@@ -3342,6 +4660,9 @@ function resetFindingsFilters() {
 
   const actSelect = document.getElementById('filter-findings-activity');
   if (actSelect) actSelect.value = '';
+
+  const reviewSelect = document.getElementById('filter-findings-review-status');
+  if (reviewSelect) reviewSelect.value = '';
 
   const legacySelect = document.getElementById('filter-finding-type');
   if (legacySelect) legacySelect.value = '';
@@ -3377,46 +4698,19 @@ async function loadFindings() {
   }
 }
 
-async function loadMLAnomalies() {
-  if (!state.activeInvestigationId) return;
-  const currentInvId = state.activeInvestigationId;
-  const invVersion = state.investigationVersion;
-  const seq = ++state.requestSeq.findings;
-  const tbody = document.getElementById('ml-anomalies-tbody');
-  if (!tbody) return;
-
-  try {
-    const res = await apiRequest(`/detection/findings?investigation_id=${currentInvId}&finding_type=ML_ANOMALY&limit=100`);
-    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return; // Stale guard
-    tbody.innerHTML = '';
-    if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No anomalies detected. Run ML Anomaly Analysis (requires >= 10 normalized records per source).</td></tr>';
-      return;
-    }
-    res.items.forEach(f => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><span class="badge badge-mono">${escapeHtml(f.rule_id)}</span></td>
-        <td class="font-mono"><strong>${f.severity.toFixed(2)}</strong></td>
-        <td><span class="badge alert-warning">ANOMALY</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewDetailModal('Anomaly Details', ${escapeHtml(JSON.stringify({
-            'Anomaly Score': f.severity.toFixed(2),
-            'Status': 'Anomaly Detected',
-            'Model': f.rule_id || 'Isolation Forest',
-            'Description': f.description || '',
-            'Detected At': new Date(f.created_at).toLocaleString()
-          }))})">Inspect Details</button>
-        </td>
-        <td style="max-width: 420px; font-size: 11px;">${escapeHtml(f.description || '')}</td>
-        <td class="text-sm">${new Date(f.created_at).toLocaleString()}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  } catch (err) {
-    if (invVersion !== state.investigationVersion || seq !== state.requestSeq.findings) return;
-    tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Error loading anomalies: ${err.message}</td></tr>`;
+function formatContextSignals(attrs) {
+  if (!attrs || typeof attrs !== 'object' || Object.keys(attrs).length === 0) {
+    return '<span class="text-muted text-xs">—</span>';
   }
+  const entries = Object.entries(attrs);
+  const items = entries.slice(0, 2).map(([k, v]) => {
+    const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return `<span class="badge badge-mono text-xs">${escapeHtml(k)}: ${escapeHtml(val)}</span>`;
+  });
+  if (entries.length > 2) {
+    items.push(`<span class="text-muted text-xs">+${entries.length - 2} more</span>`);
+  }
+  return items.join(' ');
 }
 
 async function loadCorrelations() {
@@ -3426,7 +4720,8 @@ async function loadCorrelations() {
   const seq = ++state.requestSeq.correlations;
   const tbody = document.getElementById('correlations-tbody');
   if (!tbody) return;
-  const rtype = document.getElementById('filter-rel-type').value;
+  const rtypeEl = document.getElementById('filter-rel-type');
+  const rtype = rtypeEl ? rtypeEl.value : '';
 
   let query = `/correlation/relationships?investigation_id=${currentInvId}&limit=100`;
   if (rtype) query += `&relationship_type=${rtype}`;
@@ -3435,26 +4730,44 @@ async function loadCorrelations() {
     const res = await apiRequest(query);
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.correlations) return; // Stale guard
     tbody.innerHTML = '';
-    if (res.items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No evidence correlations discovered yet. Requires >= 2 normalized evidence records.</td></tr>';
+    const items = res.items || [];
+    const countBadge = document.getElementById('correlations-count-badge');
+    if (countBadge) {
+      countBadge.textContent = `${items.length} relationship${items.length === 1 ? '' : 's'}`;
+    }
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No evidence correlations discovered yet. Requires >= 2 normalized evidence records.</td></tr>';
       return;
     }
-    res.items.forEach(rel => {
+    items.forEach(rel => {
       const tr = document.createElement('tr');
+      const relBadge = `<span class="badge badge-mono">${escapeHtml(formatEnum(rel.relationship_type))}</span>`;
+      const weightDisplay = `<span class="font-mono"><strong>${Number(rel.weight ?? 0).toFixed(2)}</strong></span>`;
+
+      const srcDisplay = rel.source_evidence_id ?
+        `<button type="button" class="evidence-link-btn font-mono" onclick="window.jumpToEvidenceRecord('', '${escapeHtml(rel.source_evidence_id)}')" title="Inspect in Evidence Explorer: ${escapeHtml(rel.source_evidence_id)}">${compactId(rel.source_evidence_id)}</button>` :
+        `<span class="text-muted font-mono text-sm">—</span>`;
+
+      const tgtDisplay = rel.target_evidence_id ?
+        `<button type="button" class="evidence-link-btn font-mono" onclick="window.jumpToEvidenceRecord('', '${escapeHtml(rel.target_evidence_id)}')" title="Inspect in Evidence Explorer: ${escapeHtml(rel.target_evidence_id)}">${compactId(rel.target_evidence_id)}</button>` :
+        `<span class="text-muted font-mono text-sm">—</span>`;
+
+      const signalsDisplay = formatContextSignals(rel.context_attributes);
+      const actionsDisplay = `<button type="button" class="btn btn-secondary btn-xs" onclick="viewDetailModal('Context Attributes', ${escapeHtml(JSON.stringify(rel.context_attributes || {}))})">View Attributes</button>`;
+
       tr.innerHTML = `
-        <td><span class="badge badge-mono">${formatEnum(rel.relationship_type)}</span></td>
-        <td class="font-mono"><strong>${rel.weight.toFixed(2)}</strong></td>
-        <td class="font-mono text-sm" title="${escapeHtml(rel.source_evidence_id)}">${compactId(rel.source_evidence_id)}</td>
-        <td class="font-mono text-sm" title="${escapeHtml(rel.target_evidence_id)}">${compactId(rel.target_evidence_id)}</td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="viewDetailModal('Context Attributes', ${escapeHtml(JSON.stringify(rel.context_attributes))})">View Attributes</button>
-        </td>
+        <td>${relBadge}</td>
+        <td>${weightDisplay}</td>
+        <td>${srcDisplay}</td>
+        <td>${tgtDisplay}</td>
+        <td>${signalsDisplay}</td>
+        <td>${actionsDisplay}</td>
       `;
       tbody.appendChild(tr);
     });
   } catch (err) {
     if (invVersion !== state.investigationVersion || seq !== state.requestSeq.correlations) return;
-    tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Error loading correlations: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Error loading correlations: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -3737,6 +5050,10 @@ function selectEvidenceRecord(evidenceId) {
     });
   }
 
+  if (state.activeTab === 'tab-evidence' && evidenceId) {
+    updateRouteHash(state.activeInvestigationId, 'evidence', { evidence: evidenceId });
+  }
+
   if (!evidenceId) {
     renderEvidenceInspector(null);
     return;
@@ -3783,13 +5100,21 @@ function selectPreviousEvidenceRow() {
   }
 }
 
-function scrollSelectedRowIntoView(evidenceId) {
+function scrollSelectedRowIntoView(evidenceId, pulse = false) {
   const tbody = document.getElementById('evidence-records-tbody');
   if (!tbody) return;
   const row = tbody.querySelector(`tr[data-evidence-id="${evidenceId}"]`);
   if (row) {
     row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     row.focus({ preventScroll: true });
+    if (pulse) {
+      row.classList.remove('row-target-highlight');
+      void row.offsetWidth; // Force reflow
+      row.classList.add('row-target-highlight');
+      setTimeout(() => {
+        row.classList.remove('row-target-highlight');
+      }, 2500);
+    }
   }
 }
 
@@ -3837,7 +5162,9 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
     if (quickBadge) quickBadge.style.display = 'none';
     content.innerHTML = `
       <div class="inspector-empty-state" style="padding: 32px 16px; text-align: center; color: var(--text-secondary);">
-        <div style="font-size: 24px; margin-bottom: 8px; opacity: 0.5;">🔍</div>
+        <div style="margin-bottom: 8px; opacity: 0.5; color: var(--color-text-muted);">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </div>
         <div style="font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">No Event Selected</div>
         <div class="text-sm text-muted">
           Select an evidence event from the table or press <kbd class="kbd-hint">J</kbd> / <kbd class="kbd-hint">K</kbd> to inspect normalized attributes, forensic provenance, and threat context.
@@ -3867,7 +5194,7 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
   // Command line if present
   const cmdLine = rawAttrs.command_line || rawAttrs.cmdline || rawAttrs.command || null;
 
-  // Hash value display (prominently labeled CLAIMED UNVERIFIED)
+  // Hash value display (prominently labeled Claimed (unverified))
   let hashDisplayHtml = '';
   if (item.file_hash) {
     hashDisplayHtml = `
@@ -3875,7 +5202,7 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
         <div class="inspector-k" style="display: flex; align-items: center; justify-content: space-between;">
           <span>Log-Extracted File Hash</span>
           <span class="badge badge-mono text-xs" style="background: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3);">
-            CLAIMED (UNVERIFIED)
+            Claimed (unverified)
           </span>
         </div>
         <div class="inspector-v" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
@@ -3936,6 +5263,67 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
     findingsHtml = `<div class="text-xs text-muted">No detection rules or ML anomalies flagged this specific evidence record.</div>`;
   }
 
+  // Schema Fields Partitioning for Dense CES Display
+  const allSchemaFields = [
+    { key: 'user_id', label: 'User ID', val: item.user_id, isMono: true, isProminent: true },
+    { key: 'ip_endpoint', label: 'Network Endpoint', val: item.ip_address ? `${item.ip_address}${item.port ? `:${item.port}` : ''}` : null, isMono: true, isProminent: true },
+    { key: 'process_name', label: 'Process Name', val: item.process_name, isMono: true },
+    { key: 'process_id', label: 'Process ID (PID)', val: (item.process_id !== null && item.process_id !== undefined) ? String(item.process_id) : null, isMono: true },
+    { key: 'parent_process_name', label: 'Parent Process', val: item.parent_process_name, isMono: true },
+    { key: 'device_id', label: 'Device ID', val: item.device_id, isMono: true },
+    { key: 'session_id', label: 'Session ID', val: item.session_id, isMono: true },
+    { key: 'protocol', label: 'Protocol', val: item.protocol, isMono: true },
+    { key: 'action', label: 'Action', val: item.action, isMono: false },
+    { key: 'status', label: 'Status', val: item.status, isMono: false },
+    { key: 'file_path', label: 'File Path', val: item.file_path, isMono: true, fullWidth: true }
+  ];
+
+  const populatedFields = allSchemaFields.filter(f => f.val !== null && f.val !== undefined && String(f.val).trim() !== '');
+  const unpopulatedFields = allSchemaFields.filter(f => !f.val || String(f.val).trim() === '');
+
+  let cesEntitiesHtml = '';
+  if (cmdLine) {
+    cesEntitiesHtml += `
+      <div class="inspector-cmdline-card">
+        <div class="ces-field-label">Command Line Execution</div>
+        <div class="inspector-cmdline-text">${escapeHtml(cmdLine)}</div>
+      </div>
+    `;
+  }
+
+  if (populatedFields.length > 0) {
+    cesEntitiesHtml += `
+      <div class="ces-two-col-grid" style="margin-top: ${cmdLine ? '8px' : '0'};">
+        ${populatedFields.map(f => `
+          <div class="ces-field-cell ${f.fullWidth ? 'ces-cell-full' : ''} ${f.isProminent ? 'ces-cell-prominent' : ''}">
+            <div class="ces-field-label">${escapeHtml(f.label)}</div>
+            <div class="ces-field-value ${f.isMono ? 'font-mono' : ''}">${escapeHtml(f.val)}</div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } else if (!cmdLine) {
+    cesEntitiesHtml += `<div class="text-xs text-muted" style="padding: 6px 0;">No normalized CES attributes populated for this event record.</div>`;
+  }
+
+  if (unpopulatedFields.length > 0) {
+    cesEntitiesHtml += `
+      <details class="unpopulated-fields-details">
+        <summary class="unpopulated-summary">
+          <span>Unpopulated Schema Entities (${unpopulatedFields.length})</span>
+        </summary>
+        <div class="unpopulated-grid">
+          ${unpopulatedFields.map(f => `
+            <div class="unpopulated-cell">
+              <span class="unpopulated-label">${escapeHtml(f.label)}</span>
+              <span class="unpopulated-empty">—</span>
+            </div>
+          `).join('')}
+        </div>
+      </details>
+    `;
+  }
+
   content.innerHTML = `
     ${dataQualityHtml}
 
@@ -3975,12 +5363,17 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
           </div>
         </div>
         <div class="inspector-kv" style="grid-column: 1 / -1;">
-          <div class="inspector-k">Source File SHA-256 (Recorded at Ingestion)</div>
-          <div class="inspector-v" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <div class="inspector-k" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Source File SHA-256</span>
+            <span class="badge badge-mono text-xs" style="background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3);">
+              Authoritative (Ingestion)
+            </span>
+          </div>
+          <div class="inspector-v" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px;">
             <span class="font-mono text-xs" style="word-break: break-all;" title="${escapeHtml(srcDigest)}">
               ${middleTruncate(srcDigest, 12, 10)}
             </span>
-            ${srcDigest ? `<button class="btn btn-secondary btn-sm" onclick="copyDigest('${escapeHtml(srcDigest)}', this)" title="Copy full source SHA-256 digest">Copy</button>` : ''}
+            ${srcDigest ? `<button class="btn btn-secondary btn-sm" onclick="copyDigest('${escapeHtml(srcDigest)}', this)" title="Copy authoritative source SHA-256 digest">Copy</button>` : ''}
           </div>
           <div class="text-xs text-muted" style="margin-top: 2px;">
             Cryptographic SHA-256 digest recorded at initial file ingestion.
@@ -3996,60 +5389,7 @@ function renderEvidenceInspector(ev, fullDetails = null, relatedFindings = [], i
     <!-- Common Event Schema Entities -->
     <div class="inspector-section">
       <div class="inspector-section-title">CES Normalized Entities</div>
-      <div class="inspector-kv-grid">
-        <div class="inspector-kv">
-          <div class="inspector-k">User ID</div>
-          <div class="inspector-v font-mono text-xs">${item.user_id ? escapeHtml(item.user_id) : '<span class="text-muted">—</span>'}</div>
-        </div>
-        <div class="inspector-kv">
-          <div class="inspector-k">Device ID</div>
-          <div class="inspector-v font-mono text-xs">${item.device_id ? escapeHtml(item.device_id) : '<span class="text-muted">—</span>'}</div>
-        </div>
-        <div class="inspector-kv">
-          <div class="inspector-k">Process Name</div>
-          <div class="inspector-v font-mono text-xs">${item.process_name ? escapeHtml(item.process_name) : '<span class="text-muted">—</span>'}</div>
-        </div>
-        <div class="inspector-kv">
-          <div class="inspector-k">Process ID</div>
-          <div class="inspector-v font-mono text-xs">${(item.process_id !== null && item.process_id !== undefined) ? item.process_id : '<span class="text-muted">—</span>'}</div>
-        </div>
-        ${item.parent_process_name ? `
-          <div class="inspector-kv" style="grid-column: 1 / -1;">
-            <div class="inspector-k">Parent Process</div>
-            <div class="inspector-v font-mono text-xs">${escapeHtml(item.parent_process_name)}</div>
-          </div>
-        ` : ''}
-        ${cmdLine ? `
-          <div class="inspector-kv" style="grid-column: 1 / -1;">
-            <div class="inspector-k">Command Line</div>
-            <div class="inspector-v font-mono text-xs" style="white-space: pre-wrap; word-break: break-all; background: var(--surface-bg-card); padding: 6px; border-radius: 4px; border: 1px solid var(--border-subtle);">${escapeHtml(cmdLine)}</div>
-          </div>
-        ` : ''}
-        <div class="inspector-kv">
-          <div class="inspector-k">Network IP / Port</div>
-          <div class="inspector-v font-mono text-xs">
-            ${item.ip_address ? `${escapeHtml(item.ip_address)}${item.port ? `:${item.port}` : ''}` : '<span class="text-muted">—</span>'}
-          </div>
-        </div>
-        <div class="inspector-kv">
-          <div class="inspector-k">Protocol</div>
-          <div class="inspector-v font-mono text-xs">${item.protocol ? escapeHtml(item.protocol) : '<span class="text-muted">—</span>'}</div>
-        </div>
-        ${item.file_path ? `
-          <div class="inspector-kv" style="grid-column: 1 / -1;">
-            <div class="inspector-k">File Path</div>
-            <div class="inspector-v font-mono text-xs" style="word-break: break-all;">${escapeHtml(item.file_path)}</div>
-          </div>
-        ` : ''}
-        <div class="inspector-kv">
-          <div class="inspector-k">Action</div>
-          <div class="inspector-v text-xs">${item.action ? escapeHtml(item.action) : '<span class="text-muted">—</span>'}</div>
-        </div>
-        <div class="inspector-kv">
-          <div class="inspector-k">Status</div>
-          <div class="inspector-v text-xs">${item.status ? `<span class="badge badge-mono">${escapeHtml(item.status)}</span>` : '<span class="text-muted">—</span>'}</div>
-        </div>
-      </div>
+      ${cesEntitiesHtml}
     </div>
 
     <!-- Integrity & Extracted Log Metadata -->
@@ -4166,7 +5506,7 @@ window.viewEvidenceDetailModal = async function(evidenceId) {
       if (hm.status && hm.status !== 'VALID' && hm.status !== 'MISSING') {
         hashBadgeHtml = ` <span class="badge badge-warning text-xs" style="color: #f59e0b;">${escapeHtml(hm.status)}</span>`;
       } else if (hm.verification_status === 'UNVERIFIED') {
-        hashBadgeHtml = ` <span class="badge badge-mono text-xs" title="Log-extracted claimed hash; not independently byte-verified against file on disk">CLAIMED (UNVERIFIED)</span>`;
+        hashBadgeHtml = ` <span class="badge badge-mono text-xs" title="Log-extracted claimed hash; not independently byte-verified against file on disk">Claimed (unverified)</span>`;
       }
     }
 
@@ -4370,7 +5710,7 @@ window.viewFindingProofModal = async function(findingId) {
     // Render HTML: Supporting Evidence
     let supportingEvidenceHtml = '';
     if (evError) {
-      supportingEvidenceHtml = `<div class="alert alert-danger" style="margin-bottom: 10px;">⚠️ API Error: Failed to retrieve supporting evidence: ${escapeHtml(evError)}</div>`;
+      supportingEvidenceHtml = `<div class="alert alert-danger" style="margin-bottom: 10px;">Error: Failed to retrieve supporting evidence: ${escapeHtml(evError)}</div>`;
     } else if (evidenceIds.length === 0) {
       supportingEvidenceHtml = '<div class="alert alert-info">No supporting evidence associations recorded for this finding.</div>';
     } else {
@@ -4378,7 +5718,7 @@ window.viewFindingProofModal = async function(findingId) {
       if (missingEvidenceIds.length > 0) {
         missingWarningHtml = `
           <div class="alert alert-warning" style="margin-bottom: 10px;">
-            ⚠️ Notice: ${missingEvidenceIds.length} referenced evidence record(s) could not be resolved from storage: ${escapeHtml(missingEvidenceIds.join(', '))}
+            Notice: ${missingEvidenceIds.length} referenced evidence record(s) could not be resolved from storage: ${escapeHtml(missingEvidenceIds.join(', '))}
           </div>
         `;
       }
@@ -4422,7 +5762,7 @@ window.viewFindingProofModal = async function(findingId) {
     // Render HTML: Observed Evidence Associations & Activities
     let associationsHtml = '';
     if (corrError) {
-      associationsHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">⚠️ API Error: Failed to retrieve correlation relationships: ${escapeHtml(corrError)}</div>`;
+      associationsHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">Error: Failed to retrieve correlation relationships: ${escapeHtml(corrError)}</div>`;
     } else if (relatedCorrelations.length === 0) {
       associationsHtml = '<div class="text-sm text-muted">No observed correlation relationships connecting this finding\'s supporting evidence.</div>';
     } else {
@@ -4443,7 +5783,7 @@ window.viewFindingProofModal = async function(findingId) {
 
     let activitiesHtml = '';
     if (actError) {
-      activitiesHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">⚠️ API Error: Failed to retrieve clustered activities: ${escapeHtml(actError)}</div>`;
+      activitiesHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px; margin-bottom: 8px;">Error: Failed to retrieve clustered activities: ${escapeHtml(actError)}</div>`;
     } else if (relatedActivities.length === 0) {
       activitiesHtml = '<div class="text-sm text-muted">No clustered activity threads incorporate this finding or its supporting evidence.</div>';
     } else {
@@ -4462,7 +5802,7 @@ window.viewFindingProofModal = async function(findingId) {
     // Render HTML: Explainable Prioritization Breakdown
     let prioHtml = '';
     if (prioError) {
-      prioHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px;">⚠️ API Error: Failed to retrieve prioritization triage: ${escapeHtml(prioError)}</div>`;
+      prioHtml = `<div class="alert alert-danger" style="font-size: 11px; padding: 6px 10px;">Error: Failed to retrieve prioritization triage: ${escapeHtml(prioError)}</div>`;
     } else if (matchingPriorities.length > 0) {
       prioHtml = matchingPriorities.map(prioResult => {
         const breakdown = prioResult.factor_breakdown || {};
@@ -4585,29 +5925,86 @@ window.viewFindingProofModal = async function(findingId) {
   }
 };
 
-window.jumpToEvidenceRecord = function(sourceId, evidenceId) {
+window.jumpToEvidenceRecord = async function(sourceId, evidenceId) {
   const modal = document.getElementById('modal-detail');
   if (modal) window.closeModal(modal);
 
   // Switch to Evidence tab
-  const tabBtn = document.getElementById('nav-tab-evidence');
-  if (tabBtn) tabBtn.click();
+  navigateToTab('evidence');
 
-  const srcFilter = document.getElementById('filter-evidence-source');
-  if (srcFilter) srcFilter.value = sourceId || '';
-  state.evidencePagination.source_id = sourceId || '';
-  state.evidencePagination.offset = 0;
-
-  // Immediately select and inspect the target evidence record
-  if (evidenceId) {
-    selectEvidenceRecord(evidenceId);
+  if (!evidenceId) {
+    if (sourceId) navigateToSourceEvidence(sourceId);
+    return;
   }
 
-  loadEvidenceRecords().then(() => {
-    if (evidenceId) {
-      scrollSelectedRowIntoView(evidenceId);
+  const currentInvId = state.activeInvestigationId;
+  if (!currentInvId) {
+    showAlert('No active investigation. Cannot locate evidence record.', 'warning');
+    return;
+  }
+
+  // Clear conflicting field filters so that the target record is not hidden
+  let filterReset = false;
+  const evTypeFilter = document.getElementById('filter-evidence-event-type');
+  if (evTypeFilter && evTypeFilter.value) {
+    evTypeFilter.value = '';
+    state.evidencePagination.event_type = '';
+    filterReset = true;
+  }
+  const userFilter = document.getElementById('filter-evidence-user');
+  if (userFilter && userFilter.value) {
+    userFilter.value = '';
+    state.evidencePagination.user_id = '';
+    filterReset = true;
+  }
+  const devFilter = document.getElementById('filter-evidence-device');
+  if (devFilter && devFilter.value) {
+    devFilter.value = '';
+    state.evidencePagination.device_id = '';
+    filterReset = true;
+  }
+
+  const srcFilter = document.getElementById('filter-evidence-source');
+  if (srcFilter) {
+    srcFilter.value = sourceId || '';
+  }
+  state.evidencePagination.source_id = sourceId || '';
+
+  // Immediately select and inspect the target evidence record
+  selectEvidenceRecord(evidenceId);
+
+  // Deterministically resolve pagination position using backend position endpoint
+  try {
+    const limit = state.evidencePagination.limit || 25;
+    let posUrl = `/evidence/${encodeURIComponent(evidenceId)}/position?investigation_id=${encodeURIComponent(currentInvId)}&limit=${limit}`;
+    if (sourceId) {
+      posUrl += `&source_id=${encodeURIComponent(sourceId)}`;
     }
-  });
+
+    const pos = await apiRequest(posUrl);
+
+    // Apply authoritative page offset calculated from sort order
+    state.evidencePagination.offset = pos.offset;
+
+    await loadEvidenceRecords();
+    selectEvidenceRecord(evidenceId);
+    scrollSelectedRowIntoView(evidenceId, true);
+    updateRouteHash(currentInvId, 'evidence', { evidence: evidenceId });
+
+    if (filterReset) {
+      showAlert(`Navigated to evidence record on page ${pos.page}. Explorer filters were cleared to display target.`, 'info', 4000);
+    }
+  } catch (err) {
+    console.warn(`Failed to resolve evidence position for ${evidenceId}:`, err);
+    // Safe fallback to page 1
+    state.evidencePagination.offset = 0;
+    await loadEvidenceRecords();
+    if (err.status === 404) {
+      showAlert(`Supporting evidence record (${evidenceId.substring(0, 8)}...) was not found in this investigation.`, 'warning');
+    } else {
+      showAlert(`Could not locate evidence record: ${err.message}`, 'warning');
+    }
+  }
 
   const panel = document.getElementById('evidence-records-panel');
   if (panel) {

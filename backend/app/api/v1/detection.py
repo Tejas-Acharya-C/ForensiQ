@@ -19,13 +19,19 @@ from app.detection import (
     get_rules_lookup,
     build_detection_explanation,
 )
+from datetime import datetime, timezone
 from app.models.finding import Finding
+from app.models.finding_review import FindingReview
 from app.models.evidence import Evidence
 from app.models.evidence_source import EvidenceSource
 from app.models.activity import Activity
 from app.models.relationship import Relationship
 from app.models.priority_result import PriorityResult
 from app.models.associations import FindingEvidence
+from app.schemas.finding_review import (
+    FindingReviewRead,
+    FindingReviewUpdate,
+)
 from app.schemas.finding import (
     FindingResponse,
     FindingDetailResponse,
@@ -372,6 +378,7 @@ def _build_finding_response(
     prioritization_svc: Optional[PrioritizationService] = None,
     include_explanation: bool = False,
     db: Optional[Session] = None,
+    review: Optional[FindingReview] = None,
 ) -> FindingResponse:
     """Helper to convert a Finding entity into a comprehensive FindingResponse DTO."""
     mitre_tags = finding.optional_mitre_tags or {}
@@ -421,6 +428,10 @@ def _build_finding_response(
             prioritization_svc=prioritization_svc or PrioritizationService(),
         )
 
+    review_status = review.status if review else "NEW"
+    reviewed_at = review.reviewed_at if review else None
+    review_notes = review.notes if review else None
+
     return FindingResponse(
         id=finding.id,
         investigation_id=finding.investigation_id,
@@ -441,6 +452,9 @@ def _build_finding_response(
         priority_score=priority_score,
         priority_tier=priority_tier,
         priority_source=priority_source,
+        review_status=review_status,
+        reviewed_at=reviewed_at,
+        review_notes=review_notes,
         explanation=explanation,
     )
 
@@ -460,6 +474,7 @@ def list_findings(
     priority_tier: Optional[str] = Query(None, description="Filter by priority tier (CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL)"),
     detection_method: Optional[str] = Query(None, description="Filter by detection method (RULE, ML, IOC, SEQUENCE)"),
     has_activity: Optional[bool] = Query(None, description="Filter by whether finding has linked activity"),
+    review_status: Optional[str] = Query(None, description="Filter by review status (NEW, REVIEWED, FALSE_POSITIVE, ESCALATED)"),
     sort_by: Optional[str] = Query("priority", description="Sort order: 'priority' (default) or 'created_at'"),
     limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
@@ -523,8 +538,9 @@ def list_findings(
         .all()
     )
 
-    # Pre-fetch existing Prioritization results for the investigation once
+    # Pre-fetch existing Prioritization and Review results for the investigation once (no N+1)
     prio_by_target: Dict[Tuple[str, uuid.UUID], PriorityResult] = {}
+    reviews_by_finding: Dict[uuid.UUID, FindingReview] = {}
     if investigation_id:
         existing_prio = (
             db.query(PriorityResult)
@@ -534,16 +550,35 @@ def list_findings(
         for pr in existing_prio:
             prio_by_target[(pr.target_type, pr.target_id)] = pr
 
+        existing_reviews = (
+            db.query(FindingReview)
+            .filter(FindingReview.investigation_id == investigation_id)
+            .all()
+        )
+        for rev in existing_reviews:
+            reviews_by_finding[rev.finding_id] = rev
+
     prioritization_svc = PrioritizationService()
 
     # Build response DTOs
     dto_items: List[FindingResponse] = []
     for f in all_matched:
-        resp = _build_finding_response(f, prio_by_target, prioritization_svc)
+        resp = _build_finding_response(
+            finding=f,
+            prio_by_target=prio_by_target,
+            prioritization_svc=prioritization_svc,
+            review=reviews_by_finding.get(f.id),
+        )
 
         # Filter by priority tier if requested
         if priority_tier and resp.priority_tier:
             if resp.priority_tier.upper() != priority_tier.upper().strip():
+                continue
+
+        # Filter by review status if requested
+        if review_status:
+            target_status = review_status.upper().strip()
+            if resp.review_status != target_status:
                 continue
 
         dto_items.append(resp)
@@ -560,13 +595,22 @@ def list_findings(
             reverse=True,
         )
     else:
-        # Default: Priority ordering
+        # Default: Priority ordering (canonical tier first, score desc, created_at desc, id desc)
+        tier_ranks = {
+            "CRITICAL": 5,
+            "HIGH": 4,
+            "MEDIUM": 3,
+            "LOW": 2,
+            "INFORMATIONAL": 1,
+            "INFO": 1,
+        }
+
         def priority_sort_key(item: FindingResponse):
-            # Prioritized results first (score), fallback to severity * 100
+            tier_val = tier_ranks.get((item.priority_tier or "").upper(), 0)
             has_prio = 1 if item.priority_score is not None else 0
             effective_score = item.priority_score if item.priority_score is not None else (item.severity * 100.0)
             created_ts = item.created_at.timestamp() if item.created_at else 0.0
-            return (has_prio, effective_score, created_ts, str(item.id))
+            return (tier_val, has_prio, effective_score, created_ts, str(item.id))
 
         dto_items.sort(key=priority_sort_key, reverse=True)
 
@@ -622,12 +666,21 @@ def get_finding_detail(
             prio_by_target[(pr.target_type, pr.target_id)] = pr
 
     prioritization_svc = PrioritizationService()
+    review = (
+        db.query(FindingReview)
+        .filter(
+            FindingReview.investigation_id == finding.investigation_id,
+            FindingReview.finding_id == finding.id,
+        )
+        .first()
+    )
     return _build_finding_response(
         finding=finding,
         prio_by_target=prio_by_target,
         prioritization_svc=prioritization_svc,
         include_explanation=True,
         db=db,
+        review=review,
     )
 
 
@@ -644,3 +697,101 @@ def get_finding_explanation(
 ) -> FindingDetailResponse:
     """Dedicated endpoint returning complete explainability breakdown for a finding."""
     return get_finding_detail(finding_id=finding_id, investigation_id=investigation_id, db=db)
+
+
+@router.get(
+    "/findings/{finding_id}/review",
+    response_model=FindingReviewRead,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve investigator review triage decision for a finding",
+)
+def get_finding_review(
+    finding_id: uuid.UUID,
+    investigation_id: uuid.UUID = Query(..., description="Investigation ID scoping this review"),
+    db: Session = Depends(get_db),
+) -> FindingReviewRead:
+    """Retrieve the current review decision and notes for a finding within the specified investigation."""
+    check_investigation_access(investigation_id, db)
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.investigation_id != investigation_id:
+        raise NotFoundError(f"Finding with ID '{finding_id}' not found in investigation '{investigation_id}'.")
+
+    review = (
+        db.query(FindingReview)
+        .filter(
+            FindingReview.investigation_id == investigation_id,
+            FindingReview.finding_id == finding_id,
+        )
+        .first()
+    )
+
+    if not review:
+        now = datetime.now(timezone.utc)
+        return FindingReviewRead(
+            id=uuid.uuid4(),
+            investigation_id=investigation_id,
+            finding_id=finding_id,
+            status="NEW",
+            notes=None,
+            reviewed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+    return FindingReviewRead.model_validate(review)
+
+
+@router.put(
+    "/findings/{finding_id}/review",
+    response_model=FindingReviewRead,
+    status_code=status.HTTP_200_OK,
+    summary="Record or update investigator review triage decision for a finding",
+)
+def update_finding_review(
+    finding_id: uuid.UUID,
+    payload: FindingReviewUpdate,
+    db: Session = Depends(get_db),
+) -> FindingReviewRead:
+    """Record an investigator review decision (NEW, REVIEWED, FALSE_POSITIVE, ESCALATED)
+    and optional notes. Isolates review decisions by investigation without modifying original findings.
+    """
+    check_investigation_access(payload.investigation_id, db)
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.investigation_id != payload.investigation_id:
+        raise NotFoundError(f"Finding with ID '{finding_id}' not found in investigation '{payload.investigation_id}'.")
+
+    now = datetime.now(timezone.utc)
+    review = (
+        db.query(FindingReview)
+        .filter(
+            FindingReview.investigation_id == payload.investigation_id,
+            FindingReview.finding_id == finding_id,
+        )
+        .first()
+    )
+
+    if review:
+        if "status" in payload.model_fields_set and payload.status is not None:
+            review.status = payload.status
+        if "notes" in payload.model_fields_set:
+            review.notes = payload.notes
+        review.reviewed_at = now
+        review.updated_at = now
+    else:
+        review_status = payload.status if ("status" in payload.model_fields_set and payload.status is not None) else "NEW"
+        review_notes = payload.notes if "notes" in payload.model_fields_set else None
+        review = FindingReview(
+            id=uuid.uuid4(),
+            investigation_id=payload.investigation_id,
+            finding_id=finding_id,
+            status=review_status,
+            notes=review_notes,
+            reviewed_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(review)
+
+    db.commit()
+    db.refresh(review)
+    return FindingReviewRead.model_validate(review)

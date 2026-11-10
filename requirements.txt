@@ -12,6 +12,7 @@ numpy==2.4.6
 scikit-learn==1.6.0
 python-multipart==0.0.19
 reportlab==4.2.5
+python-dateutil==2.9.0.post0
 
 # Optional PostgreSQL database driver (used only when DATABASE_URL is postgresql://):
 # psycopg[binary]==3.3.4

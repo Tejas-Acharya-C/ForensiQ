@@ -38,6 +38,7 @@ class Investigation(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     case_number: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="OPEN")
+    investigator_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # owner_user_id is kept in the ORM to match the existing DB schema.
     # The users table and FK (ondelete=SET NULL) remain untouched.

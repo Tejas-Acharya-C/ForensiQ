@@ -45,3 +45,14 @@ class EvidenceRead(EvidenceBase):
     normalized_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EvidencePositionRead(BaseModel):
+    evidence_id: uuid.UUID
+    investigation_id: uuid.UUID
+    source_id: Optional[uuid.UUID] = None
+    index: int = Field(..., ge=0, description="Zero-based global index in the sort order")
+    offset: int = Field(..., ge=0, description="Zero-based pagination page offset")
+    page: int = Field(..., ge=1, description="One-based page number")
+    limit: int = Field(..., ge=1, description="Page size limit used")
+    total: int = Field(..., ge=0, description="Total matching evidence records")

@@ -12,6 +12,7 @@ from app.models.associations import FindingEvidence, ActivityEvidence, ActivityF
 from app.models.relationship import Relationship
 from app.models.activity import Activity
 from app.models.priority_result import PriorityResult
+from app.models.finding_review import FindingReview
 
 __all__ = [
     "Base",
@@ -26,4 +27,5 @@ __all__ = [
     "ActivityEvidence",
     "ActivityFinding",
     "PriorityResult",
+    "FindingReview",
 ]

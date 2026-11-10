@@ -223,6 +223,9 @@ class FindingResponse(FindingBase):
     priority_score: Optional[float] = None
     priority_tier: Optional[str] = None
     priority_source: Optional[str] = Field(None, description="ACTIVITY, ARTIFACT, or SEVERITY_FALLBACK")
+    review_status: str = Field(default="NEW", description="Investigator review triage status: NEW, REVIEWED, FALSE_POSITIVE, ESCALATED")
+    reviewed_at: Optional[datetime] = Field(None, description="Timestamp of when finding review decision was made or updated")
+    review_notes: Optional[str] = Field(None, description="Investigator notes associated with review decision")
     explanation: Optional[FindingExplanation] = Field(None, description="Detailed explanation and traceability data (Phase 2)")
 
     model_config = ConfigDict(from_attributes=True)
